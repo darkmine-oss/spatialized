@@ -18,7 +18,14 @@ source material and paper test data are not distributed in this repository.
 ## Current scope
 
 The current implementation is focused on vectorised spatial data preparation. It
-does not yet train a random forest model or read/write GeoTIFFs directly.
+also includes thin classifier/regressor wrappers around scikit-learn random
+forests. It does not yet read/write GeoTIFFs directly.
+
+Install modelling support with:
+
+```bash
+pip install "spatialized[model]"
+```
 
 ```python
 import numpy as np
@@ -69,4 +76,16 @@ Raster metadata can be adapted from common north-up transform formats:
 from spatialized import GridTransform
 
 prediction_transform = GridTransform.from_gdal((500000, 25, 0, 7000000, 0, -25))
+```
+
+Train a spatial random forest classifier from vectorised patterns:
+
+```python
+from spatialized import SpatialRandomForestClassifier
+
+model = SpatialRandomForestClassifier(n_estimators=500, random_state=42)
+model.fit([mag, grav], centers=[(2, 2)], target=["class-a"], rotations=True)
+
+classes = model.predict([mag, grav], centers=[(2, 2)])
+entropy = model.entropy([mag, grav], centers=[(2, 2)])
 ```

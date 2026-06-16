@@ -17,8 +17,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+model = [
+  "scikit-learn>=1.4",
+]
 test = [
   "pytest>=7",
+  "scikit-learn>=1.4",
 ]
 
 [tool.hatch.build.targets.wheel]
