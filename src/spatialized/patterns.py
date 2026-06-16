@@ -39,19 +39,52 @@ class GridTransform:
             raise ValueError("cell sizes must be positive")
         object.__setattr__(self, "y_size", y_size)
 
+    @classmethod
+    def from_gdal(cls, geotransform: Sequence[float]) -> "GridTransform":
+        """Create a transform from a GDAL geotransform tuple.
+
+        Only north-up grids are supported: x rotation and y rotation must be zero,
+        x pixel size must be positive, and y pixel size must be negative.
+        """
+
+        if len(geotransform) != 6:
+            raise ValueError("GDAL geotransform must have six values")
+        left, x_size, x_rotation, top, y_rotation, y_size = geotransform
+        if x_rotation != 0 or y_rotation != 0:
+            raise ValueError("rotated geotransforms are not supported")
+        if x_size <= 0 or y_size >= 0:
+            raise ValueError("expected positive x pixel size and negative y pixel size")
+        return cls(left=left, top=top, x_size=x_size, y_size=abs(y_size))
+
+    @classmethod
+    def from_affine(cls, affine: object) -> "GridTransform":
+        """Create a transform from a rasterio/affine-style object.
+
+        The object must expose ``a``, ``b``, ``c``, ``d``, ``e``, and ``f``
+        attributes following ``x = a * col + b * row + c`` and
+        ``y = d * col + e * row + f``.
+        """
+
+        values = tuple(getattr(affine, name) for name in ("c", "a", "b", "f", "d", "e"))
+        return cls.from_gdal(values)
+
     def xy(self, rows: np.ndarray, cols: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Return x/y cell-center coordinates for row/column indices."""
 
+        row_array = np.asarray(rows)
+        col_array = np.asarray(cols)
         return (
-            self.left + (cols + 0.5) * self.x_size,
-            self.top - (rows + 0.5) * self.y_size,
+            self.left + (col_array + 0.5) * self.x_size,
+            self.top - (row_array + 0.5) * self.y_size,
         )
 
     def rowcol(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Return nearest row/column indices for x/y cell-center coordinates."""
 
-        cols = np.floor((x - self.left) / self.x_size).astype(int)
-        rows = np.floor((self.top - y) / self.y_size).astype(int)
+        x_array = np.asarray(x)
+        y_array = np.asarray(y)
+        cols = np.floor((x_array - self.left) / self.x_size).astype(int)
+        rows = np.floor((self.top - y_array) / self.y_size).astype(int)
         return rows, cols
 
 

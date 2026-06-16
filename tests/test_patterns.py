@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import numpy as np
 import pytest
 
@@ -13,6 +15,16 @@ from spatialized import (
     prepare_training_data,
     vectorize_layer,
 )
+
+
+@dataclass(frozen=True)
+class FakeAffine:
+    a: float
+    b: float
+    c: float
+    d: float
+    e: float
+    f: float
 
 
 def test_vectorize_layer_flattens_square_window_row_wise():
@@ -150,6 +162,35 @@ def test_layer_transform_maps_prediction_cells_to_layer_cells():
         result,
         np.array([[10, 11, 12, 20, 21, 22, 30, 31, 32]], dtype=float),
     )
+
+
+def test_grid_transform_round_trips_xy_and_rowcol():
+    transform = GridTransform(left=100, top=200, x_size=10, y_size=20)
+
+    x, y = transform.xy(np.array([0, 2]), np.array([1, 3]))
+    rows, cols = transform.rowcol(x, y)
+
+    np.testing.assert_array_equal(x, [115, 135])
+    np.testing.assert_array_equal(y, [190, 150])
+    np.testing.assert_array_equal(rows, [0, 2])
+    np.testing.assert_array_equal(cols, [1, 3])
+
+
+def test_grid_transform_from_gdal_accepts_north_up_transform():
+    transform = GridTransform.from_gdal((100, 10, 0, 200, 0, -20))
+
+    assert transform == GridTransform(left=100, top=200, x_size=10, y_size=20)
+
+
+def test_grid_transform_from_gdal_rejects_rotated_transform():
+    with pytest.raises(ValueError, match="rotated"):
+        GridTransform.from_gdal((100, 10, 1, 200, 0, -20))
+
+
+def test_grid_transform_from_affine_accepts_rasterio_style_object():
+    transform = GridTransform.from_affine(FakeAffine(a=10, b=0, c=100, d=0, e=-20, f=200))
+
+    assert transform == GridTransform(left=100, top=200, x_size=10, y_size=20)
 
 
 def test_centers_outside_layer_bounds_raise():

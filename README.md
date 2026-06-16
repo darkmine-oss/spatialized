@@ -62,3 +62,11 @@ dataset = prepare_training_data(
 
 print(dataset.patterns.shape, dataset.target)
 ```
+
+Raster metadata can be adapted from common north-up transform formats:
+
+```python
+from spatialized import GridTransform
+
+prediction_transform = GridTransform.from_gdal((500000, 25, 0, 7000000, 0, -25))
+```
