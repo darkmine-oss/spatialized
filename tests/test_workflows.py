@@ -7,8 +7,12 @@ from spatialized import (
     SpatialLayer,
     SpatialRandomForestClassifier,
     SpatialRandomForestRegressor,
+    UnsupervisedSpatialRandomForest,
     predict_grid,
     predict_grid_to_raster,
+    predict_target_proxy_transfer,
+    predict_unsupervised_domains,
+    train_target_proxy_classifier,
 )
 
 
@@ -85,3 +89,81 @@ def test_predict_grid_to_raster_writes_prediction_and_entropy(tmp_path):
         assert dataset.read(1).shape == (2, 2)
     with rasterio.open(probabilities_path) as dataset:
         assert dataset.count == 2
+
+
+def test_predict_unsupervised_domains_trains_classifier_and_predicts_grid():
+    values = np.array(
+        [
+            [0, 0, 0, 8],
+            [0, 0, 8, 8],
+            [1, 1, 9, 9],
+            [1, 1, 9, 9],
+        ],
+        dtype=float,
+    )
+    layer = SpatialLayer("x", values, window_size=1)
+    sample_centers = np.array([[0, 0], [0, 1], [2, 2], [3, 3]])
+
+    result = predict_unsupervised_domains(
+        [layer],
+        sample_centers,
+        prediction_mask=np.ones(values.shape, dtype=bool),
+        n_clusters=2,
+        unsupervised_model=UnsupervisedSpatialRandomForest(
+            n_estimators=25,
+            random_state=7,
+            n_jobs=1,
+        ),
+        classifier=SpatialRandomForestClassifier(n_estimators=25, random_state=7, n_jobs=1),
+        rotations=False,
+        chunk_size=4,
+    )
+
+    assert result.labels.shape == (len(sample_centers),)
+    assert result.prediction.prediction.shape == values.shape
+    assert result.prediction.entropy.shape == values.shape
+
+
+def test_train_target_proxy_classifier_balances_background_limit():
+    values = np.arange(16, dtype=float).reshape(4, 4)
+    layer = SpatialLayer("mag_hf_1vd", values, window_size=1)
+    target_mask = values > 12
+
+    model, centers, labels = train_target_proxy_classifier(
+        [layer],
+        target_mask,
+        max_background=3,
+        random_state=7,
+        classifier=SpatialRandomForestClassifier(n_estimators=20, random_state=7, n_jobs=1),
+        rotations=False,
+    )
+
+    assert centers.shape == (6, 2)
+    assert list(labels).count("target") == 3
+    assert list(labels).count("background") == 3
+    assert hasattr(model, "feature_encoder_")
+
+
+def test_predict_target_proxy_transfer_predicts_into_target_area():
+    train_values = np.arange(16, dtype=float).reshape(4, 4)
+    target_values = train_values + 1
+    train_layer = SpatialLayer("mag_hf_1vd", train_values, window_size=1)
+    target_layer = SpatialLayer("mag_hf_1vd", target_values, window_size=1)
+    train_target_mask = train_values > 12
+
+    result = predict_target_proxy_transfer(
+        [train_layer],
+        [target_layer],
+        train_target_mask,
+        target_prediction_mask=np.ones((4, 4), dtype=bool),
+        max_background=3,
+        random_state=7,
+        classifier=SpatialRandomForestClassifier(n_estimators=25, random_state=7, n_jobs=1),
+        rotations=False,
+        chunk_size=4,
+    )
+
+    assert result.training_centers.shape == (6, 2)
+    assert result.prediction.prediction.shape == (4, 4)
+    assert result.prediction.probabilities.shape == (4, 4, 2)
+    assert result.prediction.entropy.shape == (4, 4)

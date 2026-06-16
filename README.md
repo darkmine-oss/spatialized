@@ -85,6 +85,14 @@ python examples/paper_like_experiment.py --output-dir paper_like_outputs
 It creates magnetic/gravity-like covariates, geology-like classes, full-grid
 class predictions, entropy, zone-of-influence rasters, and unsupervised clusters.
 
+For ferricrete/paleovalley-style targeting, use `predict_target_proxy_transfer`
+to train on labelled target units in one area and predict equivalent target
+proxies in another area.
+
+For unsupervised potential-field domains, use `predict_unsupervised_domains` to
+cluster sampled spatial patterns and predict domain labels and entropy over a
+full grid.
+
 ## Feature Importance
 
 ```python

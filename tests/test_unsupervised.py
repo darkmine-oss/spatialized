@@ -4,6 +4,8 @@ import pytest
 from spatialized import (
     SpatialLayer,
     UnsupervisedSpatialRandomForest,
+    affinity_from_distance,
+    cluster_diagnostics,
     synthetic_patterns,
 )
 
@@ -91,6 +93,46 @@ def test_unsupervised_spectral_cluster_and_mds_return_center_outputs():
     assert labels.shape == (len(centers),)
     assert set(labels) <= {0, 1}
     assert embedding.shape == (len(centers), 2)
+
+
+def test_affinity_from_distance_has_unit_diagonal():
+    distance = np.array([[0.0, 0.2, 0.8], [0.2, 0.0, 0.6], [0.8, 0.6, 0.0]])
+
+    affinity = affinity_from_distance(distance)
+
+    assert affinity.shape == distance.shape
+    np.testing.assert_array_equal(np.diag(affinity), [1.0, 1.0, 1.0])
+    assert affinity[0, 1] > affinity[0, 2]
+
+
+def test_cluster_diagnostics_returns_silhouette_and_eigengaps():
+    distance = np.array(
+        [
+            [0.0, 0.1, 0.8, 0.9],
+            [0.1, 0.0, 0.85, 0.88],
+            [0.8, 0.85, 0.0, 0.12],
+            [0.9, 0.88, 0.12, 0.0],
+        ]
+    )
+
+    diagnostics = cluster_diagnostics(distance, k_values=[2], random_state=7)
+
+    np.testing.assert_array_equal(diagnostics.k_values, [2])
+    assert diagnostics.silhouette_scores.shape == (1,)
+    assert diagnostics.eigenvalues.shape == (4,)
+    assert diagnostics.eigengaps.shape == (2,)
+
+
+def test_unsupervised_model_diagnostics_uses_fitted_distance():
+    layer = SpatialLayer("x", np.arange(16, dtype=float).reshape(4, 4), window_size=1)
+    centers = [(0, 0), (0, 1), (3, 2), (3, 3)]
+    model = UnsupervisedSpatialRandomForest(n_estimators=25, random_state=7, n_jobs=1)
+    model.fit([layer], centers, rotations=False)
+
+    diagnostics = model.diagnostics(k_values=[2])
+
+    np.testing.assert_array_equal(diagnostics.k_values, [2])
+    assert diagnostics.silhouette_scores.shape == (1,)
 
 
 def test_unsupervised_methods_require_fit():

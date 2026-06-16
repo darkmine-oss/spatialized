@@ -23,6 +23,16 @@ class UnsupervisedResult:
     rotations: bool
 
 
+@dataclass(frozen=True)
+class ClusterDiagnostics:
+    """Cluster-count diagnostics for a fitted unsupervised distance matrix."""
+
+    k_values: np.ndarray
+    silhouette_scores: np.ndarray
+    eigenvalues: np.ndarray
+    eigengaps: np.ndarray
+
+
 def synthetic_patterns(
     patterns: np.ndarray,
     *,
@@ -115,18 +125,20 @@ class UnsupervisedSpatialRandomForest:
     def spectral_cluster(self, n_clusters: int) -> np.ndarray:
         """Cluster fitted centers using spectral clustering on RF affinities."""
 
-        from sklearn.cluster import SpectralClustering
-
-        result = self._require_result()
-        affinity = np.exp(-(result.distance**2) / (2 * _sigma(result.distance) ** 2))
-        np.fill_diagonal(affinity, 1.0)
-        model = SpectralClustering(
+        return spectral_cluster(
+            self._require_result().distance,
             n_clusters=n_clusters,
-            affinity="precomputed",
-            n_jobs=1,
             random_state=self.random_state,
         )
-        return model.fit_predict(affinity)
+
+    def diagnostics(self, k_values: Sequence[int] = tuple(range(2, 11))) -> ClusterDiagnostics:
+        """Return silhouette and eigengap diagnostics for candidate cluster counts."""
+
+        return cluster_diagnostics(
+            self._require_result().distance,
+            k_values=k_values,
+            random_state=self.random_state,
+        )
 
     def mds(self, n_components: int = 2) -> np.ndarray:
         """Embed fitted center distances with metric MDS."""
@@ -149,6 +161,70 @@ class UnsupervisedSpatialRandomForest:
         return self.result_
 
 
+def spectral_cluster(
+    distance: np.ndarray,
+    *,
+    n_clusters: int,
+    random_state: int | None = None,
+) -> np.ndarray:
+    """Cluster a distance matrix using spectral clustering on an RBF affinity."""
+
+    from sklearn.cluster import SpectralClustering
+
+    distance_array = _as_distance_matrix(distance)
+    affinity = affinity_from_distance(distance_array)
+    model = SpectralClustering(
+        n_clusters=n_clusters,
+        affinity="precomputed",
+        n_jobs=1,
+        random_state=random_state,
+    )
+    return model.fit_predict(affinity)
+
+
+def cluster_diagnostics(
+    distance: np.ndarray,
+    *,
+    k_values: Sequence[int] = tuple(range(2, 11)),
+    random_state: int | None = None,
+) -> ClusterDiagnostics:
+    """Compute silhouette scores and affinity eigengaps for candidate cluster counts."""
+
+    from sklearn.metrics import silhouette_score
+
+    distance_array = _as_distance_matrix(distance)
+    k_array = np.asarray(k_values, dtype=int)
+    if np.any(k_array < 2):
+        raise ValueError("k_values must be at least 2")
+    if np.any(k_array >= len(distance_array)):
+        raise ValueError("k_values must be smaller than the number of samples")
+
+    scores = []
+    for k in k_array:
+        labels = spectral_cluster(distance_array, n_clusters=int(k), random_state=random_state)
+        scores.append(silhouette_score(distance_array, labels, metric="precomputed"))
+
+    affinity = affinity_from_distance(distance_array)
+    eigenvalues = np.linalg.eigvalsh(affinity)[::-1]
+    max_k = int(np.max(k_array))
+    eigengaps = eigenvalues[:max_k] - eigenvalues[1 : max_k + 1]
+    return ClusterDiagnostics(
+        k_values=k_array,
+        silhouette_scores=np.asarray(scores, dtype=float),
+        eigenvalues=eigenvalues,
+        eigengaps=eigengaps,
+    )
+
+
+def affinity_from_distance(distance: np.ndarray) -> np.ndarray:
+    """Convert a distance matrix into the RBF affinity used by SRF clustering."""
+
+    distance_array = _as_distance_matrix(distance)
+    affinity = np.exp(-(distance_array**2) / (2 * _sigma(distance_array) ** 2))
+    np.fill_diagonal(affinity, 1.0)
+    return affinity
+
+
 def _center_distance_from_leaves(
     leaves: np.ndarray,
     *,
@@ -164,6 +240,13 @@ def _center_distance_from_leaves(
     distance = grouped.min(axis=(1, 3))
     np.fill_diagonal(distance, 0.0)
     return (distance + distance.T) / 2
+
+
+def _as_distance_matrix(distance: np.ndarray) -> np.ndarray:
+    distance_array = np.asarray(distance, dtype=float)
+    if distance_array.ndim != 2 or distance_array.shape[0] != distance_array.shape[1]:
+        raise ValueError("distance must be a square matrix")
+    return distance_array
 
 
 def _sigma(distance: np.ndarray) -> float:

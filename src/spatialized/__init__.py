@@ -28,23 +28,39 @@ from .patterns import (
 )
 from .raster import RasterGrid, read_raster, read_spatial_layer, write_raster
 from .unsupervised import (
+    ClusterDiagnostics,
     UnsupervisedResult,
     UnsupervisedSpatialRandomForest,
+    affinity_from_distance,
+    cluster_diagnostics,
+    spectral_cluster,
     synthetic_patterns,
 )
-from .workflows import GridPrediction, predict_grid, predict_grid_to_raster
+from .workflows import (
+    DomainPrediction,
+    GridPrediction,
+    TransferPrediction,
+    predict_grid,
+    predict_grid_to_raster,
+    predict_target_proxy_transfer,
+    predict_unsupervised_domains,
+    train_target_proxy_classifier,
+)
 
 __all__ = [
     "EncodedColumn",
     "FeatureLayout",
     "FeatureSpec",
     "GridTransform",
+    "DomainPrediction",
     "GridPrediction",
+    "TransferPrediction",
     "PatternBatch",
     "PatternDataset",
     "PatternEncoder",
     "PredictionBatch",
     "RasterGrid",
+    "ClusterDiagnostics",
     "SpatialRandomForestClassifier",
     "SpatialRandomForestRegressor",
     "SpatialLayer",
@@ -53,6 +69,8 @@ __all__ = [
     "centers_from_mask",
     "centers_from_shape",
     "classification_entropy",
+    "affinity_from_distance",
+    "cluster_diagnostics",
     "feature_layout",
     "grid_from_centers",
     "iter_centers",
@@ -62,9 +80,13 @@ __all__ = [
     "prepare_training_data",
     "predict_grid",
     "predict_grid_to_raster",
+    "predict_target_proxy_transfer",
+    "predict_unsupervised_domains",
     "read_raster",
     "read_spatial_layer",
+    "spectral_cluster",
     "synthetic_patterns",
+    "train_target_proxy_classifier",
     "vectorize_layer",
     "write_raster",
     "zone_of_influence",

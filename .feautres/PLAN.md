@@ -22,6 +22,102 @@ implementation against the original workflow:
 
 These checks should become regression tests or reproducible validation notebooks.
 
+Data to gather:
+
+- authorised SRF paper rasters and point/class response data
+- paper-equivalent analogue area with magnetic, gravity, radiometric, DEM, geology,
+  and geochemistry layers
+- training/validation split definitions used in the paper, if available
+
+### Ferricrete / Paleovalley Gold Targeting Workflow
+
+Status: planned.
+
+Implement a workflow inspired by the ferricrete/paleovalley paper:
+
+- train on a labelled ferricrete/inset-valley area
+- predict target units into one or more transfer areas
+- export target probability/class rasters
+- export entropy/uncertainty rasters
+- export feature-importance and zone-of-influence rasters
+- support high-resolution magnetic layers such as RTP, high-frequency residual,
+  and 1VD
+
+Data to gather:
+
+- high-resolution aeromagnetic grids for at least one training area
+- matching labelled ferricrete/inset-valley polygons or mask rasters
+- one or more target areas with equivalent aeromagnetic processing
+- optional validation polygons for transfer areas
+- analogue datasets if the paper data cannot be distributed
+
+### Magnetic Preprocessing Recipes
+
+Status: planned. The package should not initially reimplement specialist
+geophysical transformations, but it should document expected layers and provide
+workflow hooks.
+
+Recipes to document/support:
+
+- TMI gridded at consistent cell size
+- continuation to common survey height
+- RTP or other regional magnetic correction as externally prepared input
+- high-frequency residual: RTP minus upward-continued RTP
+- 1VD of the high-frequency residual
+
+Data to gather:
+
+- processed magnetic layer examples
+- metadata describing survey height, line spacing, cell size, and processing
+  sequence
+- raw and processed pairs if we later implement preprocessing checks
+
+### Unsupervised Domain Diagnostics and Prediction
+
+Status: planned.
+
+Extend the unsupervised SRF workflow with:
+
+- silhouette scores across candidate cluster counts
+- eigengap analysis
+- sampled-domain clustering
+- supervised domain classifier trained from unsupervised cluster labels
+- full-grid domain prediction
+- domain entropy/uncertainty raster
+
+Data to gather:
+
+- potential-field rasters for a coherent area
+- interpreted geology boundaries for qualitative comparison
+- optional expert domain labels for validation
+
+### Deep Feature Potential-Field Clustering
+
+Status: planned, optional/heavy dependency workflow.
+
+Implement the second workflow from the unsupervised potential-field modelling
+document:
+
+- normalize potential-field rasters into a 3-channel image
+- extract sliding image patches
+- use a pretrained CNN such as ResNet50 as a feature extractor
+- reduce CNN features with UMAP
+- concatenate point intensity values
+- cluster with k-means or another clustering method
+- map clusters back to raster space
+
+Data to gather:
+
+- RTP, 1VD, and gravity rasters over the same area
+- interpreted geology or structural boundaries for qualitative comparison
+- preferred window sizes and target resolutions
+
+Dependency notes:
+
+- add optional `deep` extra only when this workflow is implemented
+- likely dependencies: `torch`/`torchvision` or another CNN backend,
+  `umap-learn`, and possibly image tiling utilities
+
 ### Feature Importance and Zone of Influence
 
 Status: implemented for fitted scikit-learn-backed spatialized model wrappers.

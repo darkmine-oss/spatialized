@@ -30,3 +30,15 @@ def test_paper_like_experiment_smoke(tmp_path):
     assert "predicted_classes.tif" in result.stdout
     assert (tmp_path / "summary.json").exists()
     assert (tmp_path / "prediction_entropy.tif").exists()
+
+
+def test_ferricrete_transfer_workflow_smoke():
+    result = subprocess.run(
+        [sys.executable, "examples/ferricrete_transfer_workflow.py"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "prediction grid:" in result.stdout
+    assert "entropy grid:" in result.stdout
