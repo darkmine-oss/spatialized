@@ -94,7 +94,7 @@ write_raster("classes.tif", predicted_grid, reference=read_raster("prediction.ti
 Train a spatial random forest classifier from vectorised patterns:
 
 ```python
-from spatialized import SpatialRandomForestClassifier
+from spatialized import SpatialRandomForestClassifier, predict_grid_to_raster
 
 model = SpatialRandomForestClassifier(n_estimators=500, random_state=42)
 model.fit([mag, grav], centers=[(2, 2)], target=["class-a"], rotations=True)
@@ -104,4 +104,13 @@ entropy = model.entropy([mag, grav], centers=[(2, 2)])
 
 for batch in model.iter_predict([mag, grav], centers, chunk_size=10_000, entropy=True):
     print(batch.centers.shape, batch.prediction.shape, batch.entropy.shape)
+
+predict_grid_to_raster(
+    model,
+    [mag, grav],
+    prediction_mask=np.isnan(prediction_grid),
+    reference=read_raster("prediction.tif"),
+    output_path="classes.tif",
+    entropy_path="entropy.tif",
+)
 ```
