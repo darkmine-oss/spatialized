@@ -83,6 +83,15 @@ class PatternBatch:
     patterns: np.ndarray
 
 
+@dataclass(frozen=True)
+class PatternDataset:
+    """Prepared spatial patterns with optional response values."""
+
+    centers: np.ndarray
+    patterns: np.ndarray
+    target: np.ndarray | None = None
+
+
 def pattern_size_from_edge(edge: float, cell_size: float) -> int:
     """Return the square pattern width used by the original R implementation.
 
@@ -157,6 +166,41 @@ def iter_pattern_batches(
         )
 
 
+def prepare_training_data(
+    layers: Sequence[SpatialLayer],
+    centers: Iterable[Center] | np.ndarray,
+    target: Sequence[object] | np.ndarray,
+    *,
+    prediction_transform: GridTransform | None = None,
+    rotations: bool = True,
+) -> PatternDataset:
+    """Build pattern and response arrays for supervised SRF training.
+
+    When ``rotations`` is true, each center contributes four pattern rows and its
+    response value is repeated four times in the same center-major order.
+    """
+
+    center_array = _as_centers(centers)
+    target_array = np.asarray(target)
+    if target_array.ndim != 1:
+        raise ValueError("target must be one-dimensional")
+    if len(target_array) != len(center_array):
+        raise ValueError("target length must match centers length")
+
+    patterns = prepare_patterns(
+        layers,
+        center_array,
+        prediction_transform=prediction_transform,
+        rotations=rotations,
+    )
+    repeats = 4 if rotations else 1
+    return PatternDataset(
+        centers=center_array,
+        patterns=patterns,
+        target=np.repeat(target_array, repeats),
+    )
+
+
 def prepare_patterns(
     layers: Sequence[SpatialLayer],
     centers: Iterable[Center] | np.ndarray,
@@ -214,8 +258,11 @@ def vectorize_layer(
     windows = _extract_windows(layer.values, rows, cols, layer.window_size)
 
     if rotations:
-        variants = [np.rot90(windows, k=k, axes=(1, 2)) for k in range(4)]
-        windows = np.concatenate(variants, axis=0)
+        variants = np.stack(
+            [np.rot90(windows, k=k, axes=(1, 2)) for k in range(4)],
+            axis=1,
+        )
+        windows = variants.reshape(windows.shape[0] * 4, layer.window_size, layer.window_size)
 
     flattened = windows.reshape(windows.shape[0], -1)
     if layer.sparse_indices is not None:

@@ -10,6 +10,7 @@ from spatialized import (
     iter_pattern_batches,
     pattern_size_from_edge,
     prepare_patterns,
+    prepare_training_data,
     vectorize_layer,
 )
 
@@ -76,6 +77,29 @@ def test_rotations_quadruple_rows_per_center():
                 [8, 13, 18, 7, 12, 17, 6, 11, 16],
                 [18, 17, 16, 13, 12, 11, 8, 7, 6],
                 [16, 11, 6, 17, 12, 7, 18, 13, 8],
+            ],
+            dtype=float,
+        ),
+    )
+
+
+def test_rotations_are_grouped_by_center():
+    layer = SpatialLayer("x", np.arange(36).reshape(6, 6), window_size=3)
+
+    result = vectorize_layer(layer, [(2, 2), (3, 3)], rotations=True)
+
+    np.testing.assert_array_equal(
+        result,
+        np.array(
+            [
+                [7, 8, 9, 13, 14, 15, 19, 20, 21],
+                [9, 15, 21, 8, 14, 20, 7, 13, 19],
+                [21, 20, 19, 15, 14, 13, 9, 8, 7],
+                [19, 13, 7, 20, 14, 8, 21, 15, 9],
+                [14, 15, 16, 20, 21, 22, 26, 27, 28],
+                [16, 22, 28, 15, 21, 27, 14, 20, 26],
+                [28, 27, 26, 22, 21, 20, 16, 15, 14],
+                [26, 20, 14, 27, 21, 15, 28, 22, 16],
             ],
             dtype=float,
         ),
@@ -193,3 +217,28 @@ def test_iter_pattern_batches_preserves_centers_when_rotations_expand_rows():
 
     np.testing.assert_array_equal(batch.centers, [[1, 1], [2, 2]])
     assert batch.patterns.shape == (8, 9)
+
+
+def test_prepare_training_data_repeats_target_for_rotation_rows():
+    layer = SpatialLayer("x", np.arange(36).reshape(6, 6), window_size=3)
+
+    dataset = prepare_training_data(
+        [layer],
+        centers=[(2, 2), (3, 3)],
+        target=np.array(["ore", "waste"]),
+        rotations=True,
+    )
+
+    np.testing.assert_array_equal(dataset.centers, [[2, 2], [3, 3]])
+    assert dataset.patterns.shape == (8, 9)
+    np.testing.assert_array_equal(
+        dataset.target,
+        ["ore", "ore", "ore", "ore", "waste", "waste", "waste", "waste"],
+    )
+
+
+def test_prepare_training_data_validates_target_length():
+    layer = SpatialLayer("x", np.arange(9).reshape(3, 3), window_size=3)
+
+    with pytest.raises(ValueError, match="target length"):
+        prepare_training_data([layer], centers=[(1, 1)], target=[])

@@ -46,3 +46,19 @@ centers = centers_from_mask(np.isnan(prediction_grid))
 for batch in iter_pattern_batches([mag, grav], centers, chunk_size=10_000):
     print(batch.centers.shape, batch.patterns.shape)
 ```
+
+For supervised training data, responses are repeated to match rotation-augmented
+rows:
+
+```python
+from spatialized import prepare_training_data
+
+dataset = prepare_training_data(
+    [mag, grav],
+    centers=[(2, 2)],
+    target=["class-a"],
+    rotations=True,
+)
+
+print(dataset.patterns.shape, dataset.target)
+```
