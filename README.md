@@ -24,7 +24,7 @@ forests. It does not yet read/write GeoTIFFs directly.
 Install modelling support with:
 
 ```bash
-pip install "spatialized[model]"
+pip install "spatialized[model,raster]"
 ```
 
 ```python
@@ -78,6 +78,17 @@ Raster metadata can be adapted from common north-up transform formats:
 from spatialized import GridTransform
 
 prediction_transform = GridTransform.from_gdal((500000, 25, 0, 7000000, 0, -25))
+```
+
+GeoTIFF rasters can be read and written with the optional raster extra:
+
+```python
+from spatialized import read_raster, read_spatial_layer, write_raster
+
+mag = read_spatial_layer("mag.tif", window_size=7)
+grav = read_spatial_layer("gravity.tif", window_size=5)
+
+write_raster("classes.tif", predicted_grid, reference=read_raster("prediction.tif"))
 ```
 
 Train a spatial random forest classifier from vectorised patterns:
