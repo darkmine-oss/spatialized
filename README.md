@@ -73,6 +73,18 @@ embedding = unsupervised.mds(n_components=2)
 distance = unsupervised.distance_
 ```
 
+## Paper-Style Synthetic Experiment
+
+Run a synthetic experiment that mirrors the paper workflow structure without
+using restricted paper data:
+
+```bash
+python examples/paper_like_experiment.py --output-dir paper_like_outputs
+```
+
+It creates magnetic/gravity-like covariates, geology-like classes, full-grid
+class predictions, entropy, zone-of-influence rasters, and unsupervised clusters.
+
 ## Feature Importance
 
 ```python

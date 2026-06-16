@@ -4,6 +4,10 @@
 
 ### Validate Against Paper/Test Data
 
+Status: synthetic paper-style workflow exists in
+`examples/paper_like_experiment.py`; validation against actual Paper Author data
+is still pending.
+
 When the Paper Author provides the authorised paper/test data, compare the Python
 implementation against the original workflow:
 
@@ -107,8 +111,8 @@ Remaining work:
 ### CLI and Examples
 
 Status: partially implemented. A CLI entrypoint now supports feature-layout JSON
-export and chunked full-grid prediction from a pickled fitted model. A synthetic
-end-to-end example has been added under `examples/`.
+export and chunked full-grid prediction from a pickled fitted model. Synthetic
+end-to-end and paper-style examples have been added under `examples/`.
 
 Continue adding command-line or script workflows for common use cases:
 

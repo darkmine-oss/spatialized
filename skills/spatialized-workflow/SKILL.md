@@ -9,22 +9,6 @@ Use this skill when a task involves this repository's spatial random forest
 workflow. Prefer the CLI for repeatable file-based workflows and the Python API
 for tests, notebooks, or custom orchestration.
 
-## Validate First
-
-Run:
-
-```bash
-.venv/bin/pytest -q
-```
-
-If dependencies are missing, install the development extras:
-
-```bash
-.venv/bin/pip install -e '.[dev]'
-```
-
-The `dev` extra includes test, model, raster, and release tooling.
-
 ## Feature Layout Metadata
 
 Use the CLI when the user needs auditable feature-column metadata:
@@ -98,12 +82,3 @@ model.fit(layers, centers, rotations=True)
 clusters = model.spectral_cluster(n_clusters=4)
 embedding = model.mds(n_components=2)
 ```
-
-## Checks Before Handoff
-
-- Run `.venv/bin/pytest -q`.
-- Confirm generated rasters match the reference grid shape and transform.
-- For feature importance, verify `model.zone_of_influence(layers)` returns one
-  window per layer.
-- For categorical rasters, verify the fitted model has `feature_encoder_`
-  metadata.
