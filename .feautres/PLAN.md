@@ -93,18 +93,20 @@ Data to gather:
 
 ### Deep Feature Potential-Field Clustering
 
-Status: planned, optional/heavy dependency workflow.
+Status: partially implemented. Lightweight helpers exist for channel
+normalisation, patch extraction, feature-vector reduction, and clustering. The
+pretrained CNN feature extractor is still pending.
 
 Implement the second workflow from the unsupervised potential-field modelling
 document:
 
-- normalize potential-field rasters into a 3-channel image
-- extract sliding image patches
-- use a pretrained CNN such as ResNet50 as a feature extractor
-- reduce CNN features with UMAP
-- concatenate point intensity values
-- cluster with k-means or another clustering method
-- map clusters back to raster space
+- normalize potential-field rasters into a 3-channel image (implemented)
+- extract sliding image patches (implemented)
+- use a pretrained CNN such as ResNet50 as a feature extractor (pending)
+- reduce CNN features with UMAP/PCA fallback (implemented)
+- concatenate point intensity values (pending helper)
+- cluster with k-means or another clustering method (implemented)
+- map clusters back to raster space (implemented)
 
 Data to gather:
 

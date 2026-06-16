@@ -93,6 +93,10 @@ For unsupervised potential-field domains, use `predict_unsupervised_domains` to
 cluster sampled spatial patterns and predict domain labels and entropy over a
 full grid.
 
+Deep-feature potential-field clustering helpers are also available for
+normalising raster channels, extracting patches, and clustering feature vectors.
+The pretrained CNN extractor itself is planned as an optional heavier workflow.
+
 ## Feature Importance
 
 ```python

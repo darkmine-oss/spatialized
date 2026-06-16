@@ -1,6 +1,13 @@
 """Spatial random forest preparation utilities."""
 
 from .encoding import EncodedColumn, PatternEncoder
+from .deep_features import (
+    DeepFeatureClusteringResult,
+    cluster_feature_vectors,
+    extract_patches,
+    normalize_channels,
+    patch_centers,
+)
 from .models import (
     PredictionBatch,
     SpatialRandomForestClassifier,
@@ -49,6 +56,7 @@ from .workflows import (
 
 __all__ = [
     "EncodedColumn",
+    "DeepFeatureClusteringResult",
     "FeatureLayout",
     "FeatureSpec",
     "GridTransform",
@@ -71,11 +79,15 @@ __all__ = [
     "classification_entropy",
     "affinity_from_distance",
     "cluster_diagnostics",
+    "cluster_feature_vectors",
+    "extract_patches",
     "feature_layout",
     "grid_from_centers",
     "iter_centers",
     "iter_pattern_batches",
+    "normalize_channels",
     "pattern_size_from_edge",
+    "patch_centers",
     "prepare_patterns",
     "prepare_training_data",
     "predict_grid",
