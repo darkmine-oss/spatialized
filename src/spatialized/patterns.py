@@ -10,7 +10,7 @@ degree rotations of each multivariate pattern.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, Iterator, Sequence
 
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
@@ -75,6 +75,14 @@ class SpatialLayer:
         object.__setattr__(self, "values", values)
 
 
+@dataclass(frozen=True)
+class PatternBatch:
+    """A chunk of target centers and their prepared pattern matrix."""
+
+    centers: np.ndarray
+    patterns: np.ndarray
+
+
 def pattern_size_from_edge(edge: float, cell_size: float) -> int:
     """Return the square pattern width used by the original R implementation.
 
@@ -89,6 +97,64 @@ def pattern_size_from_edge(edge: float, cell_size: float) -> int:
     size = int(np.floor((edge * 2) / cell_size))
     _validate_window_size(size)
     return size
+
+
+def centers_from_shape(shape: tuple[int, int]) -> np.ndarray:
+    """Return all grid centers for ``shape`` in row-major order."""
+
+    _validate_shape(shape)
+    return np.indices(shape).reshape(2, -1).T
+
+
+def centers_from_mask(mask: np.ndarray) -> np.ndarray:
+    """Return row/column centers where ``mask`` is true.
+
+    This mirrors the R workflow of selecting prediction raster cells before
+    pattern extraction, while keeping the selection independent from any raster
+    file format.
+    """
+
+    mask_array = np.asarray(mask)
+    if mask_array.ndim != 2:
+        raise ValueError("mask must be a 2D array")
+    return np.argwhere(mask_array)
+
+
+def iter_centers(
+    centers: Iterable[Center] | np.ndarray,
+    *,
+    chunk_size: int,
+) -> Iterator[np.ndarray]:
+    """Yield row-major center chunks of at most ``chunk_size`` rows."""
+
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be positive")
+
+    center_array = _as_centers(centers)
+    for start in range(0, len(center_array), chunk_size):
+        yield center_array[start : start + chunk_size]
+
+
+def iter_pattern_batches(
+    layers: Sequence[SpatialLayer],
+    centers: Iterable[Center] | np.ndarray,
+    *,
+    chunk_size: int,
+    prediction_transform: GridTransform | None = None,
+    rotations: bool = False,
+) -> Iterator[PatternBatch]:
+    """Yield prepared pattern matrices in bounded center chunks."""
+
+    for center_chunk in iter_centers(centers, chunk_size=chunk_size):
+        yield PatternBatch(
+            centers=center_chunk,
+            patterns=prepare_patterns(
+                layers,
+                center_chunk,
+                prediction_transform=prediction_transform,
+                rotations=rotations,
+            ),
+        )
 
 
 def prepare_patterns(
@@ -219,6 +285,13 @@ def _as_centers(centers: Iterable[Center] | np.ndarray) -> np.ndarray:
             raise ValueError("centers must contain integer row/column indices")
         center_array = center_array.astype(int)
     return center_array
+
+
+def _validate_shape(shape: tuple[int, int]) -> None:
+    if len(shape) != 2:
+        raise ValueError("shape must have two dimensions")
+    if shape[0] < 1 or shape[1] < 1:
+        raise ValueError("shape dimensions must be positive")
 
 
 def _validate_window_size(window_size: int) -> None:

@@ -4,6 +4,10 @@ import pytest
 from spatialized import (
     GridTransform,
     SpatialLayer,
+    centers_from_mask,
+    centers_from_shape,
+    iter_centers,
+    iter_pattern_batches,
     pattern_size_from_edge,
     prepare_patterns,
     vectorize_layer,
@@ -134,3 +138,58 @@ def test_centers_outside_layer_bounds_raise():
 def test_pattern_size_from_edge_matches_r_formula():
     assert pattern_size_from_edge(edge=3.99, cell_size=1) == 7
     assert pattern_size_from_edge(edge=2.99, cell_size=1) == 5
+
+
+def test_centers_from_shape_returns_row_major_grid():
+    result = centers_from_shape((2, 3))
+
+    np.testing.assert_array_equal(
+        result,
+        np.array([[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2]]),
+    )
+
+
+def test_centers_from_mask_returns_true_cells_in_row_major_order():
+    mask = np.array(
+        [
+            [False, True, False],
+            [True, False, True],
+        ]
+    )
+
+    result = centers_from_mask(mask)
+
+    np.testing.assert_array_equal(result, np.array([[0, 1], [1, 0], [1, 2]]))
+
+
+def test_iter_centers_chunks_without_reordering():
+    centers = centers_from_shape((2, 3))
+
+    chunks = list(iter_centers(centers, chunk_size=2))
+
+    assert len(chunks) == 3
+    np.testing.assert_array_equal(chunks[0], [[0, 0], [0, 1]])
+    np.testing.assert_array_equal(chunks[1], [[0, 2], [1, 0]])
+    np.testing.assert_array_equal(chunks[2], [[1, 1], [1, 2]])
+
+
+def test_iter_pattern_batches_prepares_chunked_patterns():
+    layer = SpatialLayer("x", np.arange(16).reshape(4, 4), window_size=3)
+    centers = np.array([[1, 1], [1, 2], [2, 1]])
+
+    batches = list(iter_pattern_batches([layer], centers, chunk_size=2))
+
+    assert len(batches) == 2
+    np.testing.assert_array_equal(batches[0].centers, [[1, 1], [1, 2]])
+    assert batches[0].patterns.shape == (2, 9)
+    np.testing.assert_array_equal(batches[1].centers, [[2, 1]])
+    assert batches[1].patterns.shape == (1, 9)
+
+
+def test_iter_pattern_batches_preserves_centers_when_rotations_expand_rows():
+    layer = SpatialLayer("x", np.arange(16).reshape(4, 4), window_size=3)
+
+    batch = next(iter_pattern_batches([layer], [(1, 1), (2, 2)], chunk_size=2, rotations=True))
+
+    np.testing.assert_array_equal(batch.centers, [[1, 1], [2, 2]])
+    assert batch.patterns.shape == (8, 9)

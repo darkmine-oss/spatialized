@@ -17,8 +17,8 @@ source material and paper test data are not distributed in this repository.
 
 ## Current scope
 
-This first slice is intentionally focused on vectorised spatial data preparation.
-It does not yet train a random forest model or read/write GeoTIFFs directly.
+The current implementation is focused on vectorised spatial data preparation. It
+does not yet train a random forest model or read/write GeoTIFFs directly.
 
 ```python
 import numpy as np
@@ -33,4 +33,16 @@ patterns = prepare_patterns([mag, grav], centers=[(2, 2)], rotations=True)
 # 4 rows: original, 90, 180, and 270 degree variants.
 # 18 columns: 9 mag cells followed by 9 gravity cells.
 print(patterns.shape)
+```
+
+For larger prediction grids, build centers from a boolean mask and prepare them in
+chunks:
+
+```python
+from spatialized import centers_from_mask, iter_pattern_batches
+
+centers = centers_from_mask(np.isnan(prediction_grid))
+
+for batch in iter_pattern_batches([mag, grav], centers, chunk_size=10_000):
+    print(batch.centers.shape, batch.patterns.shape)
 ```
