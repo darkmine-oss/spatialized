@@ -162,6 +162,37 @@ def centers_from_mask(mask: np.ndarray) -> np.ndarray:
     return np.argwhere(mask_array)
 
 
+def grid_from_centers(
+    shape: tuple[int, int],
+    centers: Iterable[Center] | np.ndarray,
+    values: Sequence[object] | np.ndarray,
+    *,
+    fill_value: object = np.nan,
+) -> np.ndarray:
+    """Place center-indexed values back into a grid.
+
+    ``values`` may be one-dimensional, or it may have trailing dimensions such
+    as class probabilities. Its first dimension must match the number of centers.
+    """
+
+    _validate_shape(shape)
+    center_array = _as_centers(centers)
+    value_array = np.asarray(values)
+    if value_array.ndim == 0:
+        raise ValueError("values must have at least one dimension")
+    if len(value_array) != len(center_array):
+        raise ValueError("values length must match centers length")
+
+    rows = center_array[:, 0]
+    cols = center_array[:, 1]
+    _validate_rows_cols_in_shape(shape, rows, cols)
+
+    dtype = _grid_dtype(value_array, fill_value)
+    grid = np.full(shape + value_array.shape[1:], fill_value, dtype=dtype)
+    grid[rows, cols] = value_array
+    return grid
+
+
 def iter_centers(
     centers: Iterable[Center] | np.ndarray,
     *,
@@ -356,6 +387,15 @@ def _validate_centers_in_bounds(
         raise ValueError(f"one or more centers fall outside layer {layer.name!r}")
 
 
+def _validate_rows_cols_in_shape(
+    shape: tuple[int, int],
+    rows: np.ndarray,
+    cols: np.ndarray,
+) -> None:
+    if np.any(rows < 0) or np.any(rows >= shape[0]) or np.any(cols < 0) or np.any(cols >= shape[1]):
+        raise ValueError("one or more centers fall outside output shape")
+
+
 def _as_centers(centers: Iterable[Center] | np.ndarray) -> np.ndarray:
     center_array = np.asarray(list(centers) if not isinstance(centers, np.ndarray) else centers)
     if center_array.ndim != 2 or center_array.shape[1] != 2:
@@ -372,6 +412,14 @@ def _validate_shape(shape: tuple[int, int]) -> None:
         raise ValueError("shape must have two dimensions")
     if shape[0] < 1 or shape[1] < 1:
         raise ValueError("shape dimensions must be positive")
+
+
+def _grid_dtype(values: np.ndarray, fill_value: object) -> np.dtype:
+    if values.dtype.kind in {"U", "S", "O"}:
+        return np.dtype(object)
+    if fill_value is np.nan:
+        return np.dtype(float)
+    return np.result_type(values.dtype, type(fill_value))
 
 
 def _validate_window_size(window_size: int) -> None:

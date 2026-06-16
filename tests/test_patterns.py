@@ -8,6 +8,7 @@ from spatialized import (
     SpatialLayer,
     centers_from_mask,
     centers_from_shape,
+    grid_from_centers,
     iter_centers,
     iter_pattern_batches,
     pattern_size_from_edge,
@@ -225,6 +226,48 @@ def test_centers_from_mask_returns_true_cells_in_row_major_order():
     result = centers_from_mask(mask)
 
     np.testing.assert_array_equal(result, np.array([[0, 1], [1, 0], [1, 2]]))
+
+
+def test_grid_from_centers_reconstructs_numeric_grid():
+    result = grid_from_centers(
+        (2, 3),
+        centers=[(0, 1), (1, 2)],
+        values=np.array([10, 20]),
+    )
+
+    expected = np.array([[np.nan, 10, np.nan], [np.nan, np.nan, 20]])
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_grid_from_centers_reconstructs_categorical_grid():
+    result = grid_from_centers(
+        (2, 2),
+        centers=[(0, 0), (1, 1)],
+        values=np.array(["ore", "waste"]),
+        fill_value=None,
+    )
+
+    expected = np.array([["ore", None], [None, "waste"]], dtype=object)
+    assert result.dtype == object
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_grid_from_centers_supports_trailing_probability_dimensions():
+    result = grid_from_centers(
+        (2, 2),
+        centers=[(0, 0), (1, 1)],
+        values=np.array([[0.8, 0.2], [0.1, 0.9]]),
+    )
+
+    assert result.shape == (2, 2, 2)
+    np.testing.assert_array_equal(result[0, 0], [0.8, 0.2])
+    np.testing.assert_array_equal(result[1, 1], [0.1, 0.9])
+    assert np.all(np.isnan(result[0, 1]))
+
+
+def test_grid_from_centers_rejects_centers_outside_shape():
+    with pytest.raises(ValueError, match="outside output shape"):
+        grid_from_centers((2, 2), centers=[(2, 0)], values=[1])
 
 
 def test_iter_centers_chunks_without_reordering():

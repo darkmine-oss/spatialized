@@ -46,12 +46,14 @@ For larger prediction grids, build centers from a boolean mask and prepare them 
 chunks:
 
 ```python
-from spatialized import centers_from_mask, iter_pattern_batches
+from spatialized import centers_from_mask, grid_from_centers, iter_pattern_batches
 
 centers = centers_from_mask(np.isnan(prediction_grid))
 
 for batch in iter_pattern_batches([mag, grav], centers, chunk_size=10_000):
     print(batch.centers.shape, batch.patterns.shape)
+
+predicted_grid = grid_from_centers(prediction_grid.shape, centers, predicted_classes)
 ```
 
 For supervised training data, responses are repeated to match rotation-augmented
