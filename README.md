@@ -90,4 +90,7 @@ model.fit([mag, grav], centers=[(2, 2)], target=["class-a"], rotations=True)
 
 classes = model.predict([mag, grav], centers=[(2, 2)])
 entropy = model.entropy([mag, grav], centers=[(2, 2)])
+
+for batch in model.iter_predict([mag, grav], centers, chunk_size=10_000, entropy=True):
+    print(batch.centers.shape, batch.prediction.shape, batch.entropy.shape)
 ```

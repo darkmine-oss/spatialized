@@ -1,6 +1,7 @@
 """Spatial random forest preparation utilities."""
 
 from .models import (
+    PredictionBatch,
     SpatialRandomForestClassifier,
     SpatialRandomForestRegressor,
     classification_entropy,
@@ -25,6 +26,7 @@ __all__ = [
     "GridTransform",
     "PatternBatch",
     "PatternDataset",
+    "PredictionBatch",
     "SpatialRandomForestClassifier",
     "SpatialRandomForestRegressor",
     "SpatialLayer",

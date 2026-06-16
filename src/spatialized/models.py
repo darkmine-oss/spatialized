@@ -12,6 +12,7 @@ from .patterns import (
     GridTransform,
     PatternDataset,
     SpatialLayer,
+    iter_centers,
     prepare_patterns,
     prepare_training_data,
 )
@@ -30,6 +31,16 @@ def classification_entropy(probabilities: np.ndarray) -> np.ndarray:
     clipped = np.clip(probs, 1e-12, 1.0)
     entropy = -np.sum(clipped * np.log(clipped), axis=1) / np.log(n_classes)
     return entropy
+
+
+@dataclass(frozen=True)
+class PredictionBatch:
+    """A chunk of prediction centers and model outputs."""
+
+    centers: np.ndarray
+    prediction: np.ndarray
+    probabilities: np.ndarray | None = None
+    entropy: np.ndarray | None = None
 
 
 @dataclass
@@ -91,6 +102,32 @@ class SpatialRandomForestClassifier:
             rotations=False,
         )
         return self.estimator.predict(patterns)
+
+    def iter_predict(
+        self,
+        layers: Sequence[SpatialLayer],
+        centers: Iterable[Center] | np.ndarray,
+        *,
+        chunk_size: int,
+        prediction_transform: GridTransform | None = None,
+        probabilities: bool = False,
+        entropy: bool = False,
+    ) -> Iterable[PredictionBatch]:
+        for center_chunk in iter_centers(centers, chunk_size=chunk_size):
+            patterns = prepare_patterns(
+                layers,
+                center_chunk,
+                prediction_transform=prediction_transform,
+                rotations=False,
+            )
+            prediction = self.estimator.predict(patterns)
+            proba = self.estimator.predict_proba(patterns) if probabilities or entropy else None
+            yield PredictionBatch(
+                centers=center_chunk,
+                prediction=prediction,
+                probabilities=proba if probabilities else None,
+                entropy=classification_entropy(proba) if entropy and proba is not None else None,
+            )
 
     def predict_proba(
         self,
@@ -182,3 +219,23 @@ class SpatialRandomForestRegressor:
             rotations=False,
         )
         return self.estimator.predict(patterns)
+
+    def iter_predict(
+        self,
+        layers: Sequence[SpatialLayer],
+        centers: Iterable[Center] | np.ndarray,
+        *,
+        chunk_size: int,
+        prediction_transform: GridTransform | None = None,
+    ) -> Iterable[PredictionBatch]:
+        for center_chunk in iter_centers(centers, chunk_size=chunk_size):
+            patterns = prepare_patterns(
+                layers,
+                center_chunk,
+                prediction_transform=prediction_transform,
+                rotations=False,
+            )
+            yield PredictionBatch(
+                centers=center_chunk,
+                prediction=self.estimator.predict(patterns),
+            )

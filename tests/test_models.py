@@ -36,6 +36,35 @@ def test_spatial_random_forest_classifier_fits_prepared_patterns():
     assert entropy.shape == (4,)
 
 
+def test_spatial_random_forest_classifier_iter_predict_chunks_outputs():
+    layer = SpatialLayer("x", np.array([[0, 0], [1, 1]], dtype=float), window_size=1)
+    centers = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    target = ["low", "low", "high", "high"]
+
+    model = SpatialRandomForestClassifier(n_estimators=30, random_state=7)
+    model.fit([layer], centers, target, rotations=False)
+
+    batches = list(
+        model.iter_predict(
+            [layer],
+            centers,
+            chunk_size=3,
+            probabilities=True,
+            entropy=True,
+        )
+    )
+
+    assert len(batches) == 2
+    np.testing.assert_array_equal(batches[0].centers, [[0, 0], [0, 1], [1, 0]])
+    np.testing.assert_array_equal(batches[1].centers, [[1, 1]])
+    np.testing.assert_array_equal(
+        np.concatenate([batch.prediction for batch in batches]),
+        target,
+    )
+    assert batches[0].probabilities.shape == (3, 2)
+    assert batches[0].entropy.shape == (3,)
+
+
 def test_spatial_random_forest_regressor_fits_prepared_patterns():
     layer = SpatialLayer("x", np.arange(4, dtype=float).reshape(2, 2), window_size=1)
     centers = [(0, 0), (0, 1), (1, 0), (1, 1)]
@@ -49,6 +78,22 @@ def test_spatial_random_forest_regressor_fits_prepared_patterns():
     assert prediction.shape == (4,)
     assert np.all(np.isfinite(prediction))
     assert np.corrcoef(prediction, target)[0, 1] > 0.9
+
+
+def test_spatial_random_forest_regressor_iter_predict_chunks_outputs():
+    layer = SpatialLayer("x", np.arange(4, dtype=float).reshape(2, 2), window_size=1)
+    centers = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    target = np.array([0.0, 1.0, 2.0, 3.0])
+
+    model = SpatialRandomForestRegressor(n_estimators=40, random_state=7)
+    model.fit([layer], centers, target, rotations=False)
+
+    batches = list(model.iter_predict([layer], centers, chunk_size=2))
+
+    assert len(batches) == 2
+    np.testing.assert_array_equal(batches[0].centers, [[0, 0], [0, 1]])
+    np.testing.assert_array_equal(batches[1].centers, [[1, 0], [1, 1]])
+    assert np.concatenate([batch.prediction for batch in batches]).shape == (4,)
 
 
 def test_fit_dataset_requires_target():
