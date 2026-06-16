@@ -5,6 +5,7 @@ import pytest
 
 from spatialized import (
     GridTransform,
+    FeatureLayout,
     SpatialLayer,
     centers_from_mask,
     centers_from_shape,
@@ -93,6 +94,21 @@ def test_feature_layout_describes_layer_offsets_and_sparse_cells():
     assert layout.features[9].window_col == 0
     assert layout.features[11].window_row == 2
     assert layout.features[11].window_col == 2
+    assert layout.layers[0].start == 0
+    assert layout.layers[0].stop == 9
+    assert layout.layers[1].start == 9
+    assert layout.layers[1].stop == 12
+    assert layout.layers[1].sparse_indices == (0, 4, 8)
+
+
+def test_feature_layout_round_trips_through_dict():
+    layer = SpatialLayer("x", np.zeros((3, 3)), window_size=3, sparse_indices=[0, 8])
+
+    layout = feature_layout([layer], rotations=True)
+    restored = FeatureLayout.from_dict(layout.to_dict())
+
+    assert restored == layout
+    assert restored.rotations is True
 
 
 def test_zone_of_influence_reconstructs_per_layer_windows():

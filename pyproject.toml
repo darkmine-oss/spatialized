@@ -16,6 +16,9 @@ dependencies = [
   "numpy>=1.23",
 ]
 
+[project.scripts]
+spatialized = "spatialized.cli:main"
+
 [project.optional-dependencies]
 model = [
   "scikit-learn>=1.4",

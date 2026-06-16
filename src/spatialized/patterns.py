@@ -9,7 +9,7 @@ degree rotations of each multivariate pattern.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Iterable, Iterator, Sequence
 
 import numpy as np
@@ -136,12 +136,61 @@ class FeatureSpec:
     window_col: int
     source_index: int
 
+    def to_dict(self) -> dict[str, int | str]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, int | str]) -> "FeatureSpec":
+        return cls(
+            index=int(data["index"]),
+            layer_name=str(data["layer_name"]),
+            layer_index=int(data["layer_index"]),
+            window_row=int(data["window_row"]),
+            window_col=int(data["window_col"]),
+            source_index=int(data["source_index"]),
+        )
+
+
+@dataclass(frozen=True)
+class LayerFeatureSpan:
+    """Feature-column range and pattern settings for one source layer."""
+
+    layer_name: str
+    layer_index: int
+    start: int
+    stop: int
+    count: int
+    window_size: int
+    sparse_indices: tuple[int, ...] | None = None
+
+    def to_dict(self) -> dict[str, int | str | list[int] | None]:
+        data = asdict(self)
+        data["sparse_indices"] = (
+            None if self.sparse_indices is None else list(self.sparse_indices)
+        )
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "LayerFeatureSpan":
+        sparse = data.get("sparse_indices")
+        return cls(
+            layer_name=str(data["layer_name"]),
+            layer_index=int(data["layer_index"]),
+            start=int(data["start"]),
+            stop=int(data["stop"]),
+            count=int(data["count"]),
+            window_size=int(data["window_size"]),
+            sparse_indices=None if sparse is None else tuple(int(value) for value in sparse),
+        )
+
 
 @dataclass(frozen=True)
 class FeatureLayout:
     """Column layout for a multivariate vectorised pattern matrix."""
 
     features: tuple[FeatureSpec, ...]
+    layers: tuple[LayerFeatureSpan, ...] = ()
+    rotations: bool = False
 
     def __len__(self) -> int:
         return len(self.features)
@@ -153,6 +202,28 @@ class FeatureLayout:
         return np.array(
             [feature.index for feature in self.features if feature.layer_name == layer_name],
             dtype=int,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "rotations": self.rotations,
+            "n_features": len(self),
+            "layers": [layer.to_dict() for layer in self.layers],
+            "features": [feature.to_dict() for feature in self.features],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "FeatureLayout":
+        return cls(
+            features=tuple(
+                FeatureSpec.from_dict(feature)
+                for feature in data.get("features", [])
+            ),
+            layers=tuple(
+                LayerFeatureSpan.from_dict(layer)
+                for layer in data.get("layers", [])
+            ),
+            rotations=bool(data.get("rotations", False)),
         )
 
 
@@ -172,13 +243,19 @@ def pattern_size_from_edge(edge: float, cell_size: float) -> int:
     return size
 
 
-def feature_layout(layers: Sequence[SpatialLayer]) -> FeatureLayout:
+def feature_layout(
+    layers: Sequence[SpatialLayer],
+    *,
+    rotations: bool = False,
+) -> FeatureLayout:
     """Return feature-column metadata for the provided layer sequence."""
 
     features: list[FeatureSpec] = []
+    layer_spans: list[LayerFeatureSpan] = []
     column = 0
     for layer_index, layer in enumerate(layers):
         source_indices = _layer_source_indices(layer)
+        start = column
         for source_index in source_indices:
             features.append(
                 FeatureSpec(
@@ -191,7 +268,22 @@ def feature_layout(layers: Sequence[SpatialLayer]) -> FeatureLayout:
                 )
             )
             column += 1
-    return FeatureLayout(tuple(features))
+        layer_spans.append(
+            LayerFeatureSpan(
+                layer_name=layer.name,
+                layer_index=layer_index,
+                start=start,
+                stop=column,
+                count=column - start,
+                window_size=layer.window_size,
+                sparse_indices=(
+                    None
+                    if layer.sparse_indices is None
+                    else tuple(int(index) for index in source_indices)
+                ),
+            )
+        )
+    return FeatureLayout(tuple(features), tuple(layer_spans), rotations=rotations)
 
 
 def zone_of_influence(

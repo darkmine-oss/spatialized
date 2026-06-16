@@ -74,8 +74,8 @@ Add an explicit strategy:
 
 ### Feature Layout Metadata
 
-Add a formal feature layout object so every model input column can be traced back
-to its source.
+Status: partially implemented. A formal feature layout object now lets every
+model input column be traced back to its source.
 
 Metadata should include:
 
@@ -89,9 +89,19 @@ Metadata should include:
 
 This is required for auditability and feature-importance reconstruction.
 
+Remaining work:
+
+- persist layout metadata beside trained models and raster outputs
+- include categorical encoding metadata in exported model metadata
+- include missing-value strategy metadata once implemented
+- add metadata validation against Paper Author test data
+
 ### CLI and Examples
 
-Add command-line or script workflows for common use cases:
+Status: partially implemented. A CLI entrypoint now supports feature-layout JSON
+export and chunked full-grid prediction from a pickled fitted model.
+
+Continue adding command-line or script workflows for common use cases:
 
 - read GeoTIFF layers
 - prepare training samples
@@ -101,6 +111,26 @@ Add command-line or script workflows for common use cases:
 - run unsupervised clustering
 
 Examples should use synthetic data until Paper Author test data is available.
+
+### Agent Skills Workflows
+
+Add an agent `skills/` directory so Codex or other local agents can call the
+different spatialized workflow steps safely and consistently.
+
+Skills should cover:
+
+- feature layout metadata export
+- GeoTIFF layer inspection
+- vectorised pattern preparation
+- supervised classifier/regressor training
+- full-grid prediction and GeoTIFF writing
+- feature importance and zone-of-influence export
+- categorical raster handling checks
+- unsupervised SRF clustering
+- end-to-end workflow orchestration from source rasters to outputs
+
+Each skill should document required inputs, expected outputs, validation checks,
+and which CLI/API calls it uses.
 
 ### Packaging and CI Polish
 
@@ -112,6 +142,22 @@ Improve release readiness:
 - lint/format configuration
 - decide whether to add a `full` extra combining `model` and `raster`
 - verify source distribution and wheel builds
+
+### Versioned Packages for Pip and PyPI Upload
+
+Prepare versioned packages for pip installation and publishing to PyPI.
+
+Required work:
+
+- define a versioning policy for public releases
+- verify `pip install spatialized` from built wheel and source distribution
+- build versioned artifacts with `python -m build`
+- validate artifacts with `twine check`
+- configure trusted publishing or PyPI API token handling
+- upload releases to PyPI
+- add release notes for each published version
+- document install extras such as `spatialized[model]`, `spatialized[raster]`,
+  and any future `spatialized[full]`
 
 ### Performance Testing
 
