@@ -48,6 +48,7 @@ class UnsupervisedSpatialRandomForest:
     max_features: str | int | float | None = "sqrt"
     random_state: int | None = None
     n_jobs: int | None = None
+    encoder_kwargs: dict[str, object] | None = None
     estimator_kwargs: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
@@ -79,7 +80,10 @@ class UnsupervisedSpatialRandomForest:
             rotations=rotations,
         )
         synthetic = synthetic_patterns(patterns, random_state=self.random_state)
-        self.feature_encoder_ = PatternEncoder().fit(np.vstack([patterns, synthetic]))
+        encoder_kwargs = {} if self.encoder_kwargs is None else self.encoder_kwargs
+        self.feature_encoder_ = PatternEncoder(**encoder_kwargs).fit(
+            np.vstack([patterns, synthetic])
+        )
         encoded_patterns = self.feature_encoder_.transform(patterns)
         encoded_synthetic = self.feature_encoder_.transform(synthetic)
         x = np.vstack([encoded_patterns, encoded_synthetic])

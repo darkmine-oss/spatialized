@@ -55,6 +55,25 @@ def test_spatial_random_forest_classifier_encodes_categorical_layers():
     assert model.feature_encoder_.columns_[0].categories == ("basalt", "granite")
 
 
+def test_spatial_random_forest_classifier_accepts_encoder_kwargs():
+    layer = SpatialLayer(
+        "lithology",
+        np.array([["basalt", None], ["granite", "granite"]], dtype=object),
+        window_size=1,
+    )
+    centers = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    target = ["mafic", "mafic", "felsic", "felsic"]
+
+    model = SpatialRandomForestClassifier(
+        n_estimators=20,
+        random_state=7,
+        encoder_kwargs={"categorical_missing_strategy": "most_frequent"},
+    )
+    model.fit([layer], centers, target, rotations=False)
+
+    assert model.feature_encoder_.columns_[0].fill_value == 1.0
+
+
 def test_model_feature_importance_and_zone_of_influence():
     layer = SpatialLayer("x", np.arange(25, dtype=float).reshape(5, 5), window_size=3)
     centers = [(1, 1), (1, 2), (2, 1), (2, 2), (3, 3)]

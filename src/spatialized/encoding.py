@@ -14,14 +14,33 @@ class EncodedColumn:
     index: int
     kind: str
     categories: tuple[object, ...] = ()
+    fill_value: float | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "index": self.index,
+            "kind": self.kind,
+            "categories": list(self.categories),
+            "fill_value": self.fill_value,
+        }
 
 
 @dataclass
 class PatternEncoder:
     """Convert mixed numeric/categorical pattern matrices to numeric arrays."""
 
+    numeric_missing_strategy: str = "constant"
+    categorical_missing_strategy: str = "constant"
     unknown_value: float = -1.0
     missing_value: float = -1.0
+
+    def __post_init__(self) -> None:
+        if self.numeric_missing_strategy not in {"constant", "mean"}:
+            raise ValueError("numeric_missing_strategy must be 'constant' or 'mean'")
+        if self.categorical_missing_strategy not in {"constant", "most_frequent"}:
+            raise ValueError(
+                "categorical_missing_strategy must be 'constant' or 'most_frequent'"
+            )
 
     def fit(self, patterns: np.ndarray) -> "PatternEncoder":
         matrix = _as_2d(patterns)
@@ -44,21 +63,49 @@ class PatternEncoder:
         for column in self.columns_:
             values = matrix[:, column.index]
             if column.kind == "numeric":
-                encoded[:, column.index] = _numeric_values(values, self.missing_value)
+                encoded[:, column.index] = _numeric_values(
+                    values,
+                    self.missing_value if column.fill_value is None else column.fill_value,
+                )
             else:
                 encoded[:, column.index] = _categorical_values(
                     values,
                     column.categories,
                     unknown_value=self.unknown_value,
-                    missing_value=self.missing_value,
+                    missing_value=(
+                        self.missing_value if column.fill_value is None else column.fill_value
+                    ),
                 )
         return encoded
 
     def _fit_column(self, values: np.ndarray, index: int) -> EncodedColumn:
         if _is_numeric_column(values):
-            return EncodedColumn(index=index, kind="numeric")
+            numeric = _numeric_values(values, missing_value=np.nan)
+            fill_value = self.missing_value
+            if self.numeric_missing_strategy == "mean":
+                fill_value = float(np.nanmean(numeric)) if not np.all(np.isnan(numeric)) else 0.0
+            return EncodedColumn(index=index, kind="numeric", fill_value=fill_value)
         categories = tuple(sorted(_non_missing_unique(values), key=lambda value: repr(value)))
-        return EncodedColumn(index=index, kind="categorical", categories=categories)
+        fill_value = self.missing_value
+        if self.categorical_missing_strategy == "most_frequent" and categories:
+            fill_value = float(categories.index(_most_frequent(values, categories)))
+        return EncodedColumn(
+            index=index,
+            kind="categorical",
+            categories=categories,
+            fill_value=fill_value,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        if not hasattr(self, "columns_"):
+            raise ValueError("encoder has not been fitted")
+        return {
+            "numeric_missing_strategy": self.numeric_missing_strategy,
+            "categorical_missing_strategy": self.categorical_missing_strategy,
+            "unknown_value": self.unknown_value,
+            "missing_value": self.missing_value,
+            "columns": [column.to_dict() for column in self.columns_],
+        }
 
 
 def _as_2d(patterns: np.ndarray) -> np.ndarray:
@@ -111,6 +158,13 @@ def _non_missing_unique(values: np.ndarray) -> list[object]:
         if not any(value == existing for existing in unique):
             unique.append(value)
     return unique
+
+
+def _most_frequent(values: np.ndarray, categories: tuple[object, ...]) -> object:
+    counts = []
+    for category in categories:
+        counts.append(sum(value == category for value in values if not _is_missing(value)))
+    return categories[int(np.argmax(counts))]
 
 
 def _is_missing(value: object) -> bool:

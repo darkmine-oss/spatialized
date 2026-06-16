@@ -20,8 +20,8 @@ These checks should become regression tests or reproducible validation notebooks
 
 ### Feature Importance and Zone of Influence
 
-Implement feature importance for fitted spatial random forest models, then map
-feature scores back to each layer's local spatial pattern window.
+Status: implemented for fitted scikit-learn-backed spatialized model wrappers.
+Feature scores can be mapped back to each layer's local spatial pattern window.
 
 Required outputs:
 
@@ -47,6 +47,8 @@ Remaining work:
 
 ### Categorical Raster Handling
 
+Status: implemented for model wrappers via `PatternEncoder`.
+
 Pattern preparation supports categorical/object arrays, but scikit-learn models
 need numeric features.
 
@@ -60,17 +62,23 @@ Add:
 
 ### Missing-Value Strategy
 
-The original R workflow relies on random forest imputation. The current Python
-implementation preserves missing values during pattern preparation, but model
-support depends on estimator behaviour and data type.
+Status: partially implemented via `PatternEncoder`.
 
-Add an explicit strategy:
+The original R workflow relies on random forest imputation. The current Python
+implementation preserves missing values during pattern preparation and encodes
+them before fitting/prediction.
+
+Implemented:
 
 - configurable numeric imputation
 - categorical missing handling
-- missingness indicators if useful
 - model-level validation before fitting
 - documentation of defaults and tradeoffs
+
+Remaining work:
+
+- missingness indicators if useful
+- validation against Paper Author data
 
 ### Feature Layout Metadata
 
@@ -99,7 +107,8 @@ Remaining work:
 ### CLI and Examples
 
 Status: partially implemented. A CLI entrypoint now supports feature-layout JSON
-export and chunked full-grid prediction from a pickled fitted model.
+export and chunked full-grid prediction from a pickled fitted model. A synthetic
+end-to-end example has been added under `examples/`.
 
 Continue adding command-line or script workflows for common use cases:
 
@@ -114,8 +123,10 @@ Examples should use synthetic data until Paper Author test data is available.
 
 ### Agent Skills Workflows
 
-Add an agent `skills/` directory so Codex or other local agents can call the
-different spatialized workflow steps safely and consistently.
+Status: initial `skills/spatialized-workflow/` skill added.
+
+Continue improving the agent `skills/` directory so Codex or other local agents
+can call the different spatialized workflow steps safely and consistently.
 
 Skills should cover:
 
@@ -134,14 +145,14 @@ and which CLI/API calls it uses.
 
 ### Packaging and CI Polish
 
+Status: partially implemented. Project classifiers, URLs, CLI entry point,
+`full`/`dev` extras, GitHub Actions test/build workflow, and local build
+validation have been added.
+
 Improve release readiness:
 
-- project classifiers
-- project URLs
-- CI test workflow
 - lint/format configuration
-- decide whether to add a `full` extra combining `model` and `raster`
-- verify source distribution and wheel builds
+- source distribution and wheel builds verified locally with `twine check`
 
 ### Versioned Packages for Pip and PyPI Upload
 
@@ -150,9 +161,9 @@ Prepare versioned packages for pip installation and publishing to PyPI.
 Required work:
 
 - define a versioning policy for public releases
-- verify `pip install spatialized` from built wheel and source distribution
-- build versioned artifacts with `python -m build`
-- validate artifacts with `twine check`
+- verify `pip install spatialized` from published package
+- build versioned artifacts with `python -m build` (local check passes)
+- validate artifacts with `twine check` (local check passes)
 - configure trusted publishing or PyPI API token handling
 - upload releases to PyPI
 - add release notes for each published version

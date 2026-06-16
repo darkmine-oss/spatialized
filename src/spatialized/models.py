@@ -54,6 +54,7 @@ class SpatialRandomForestClassifier:
     max_features: str | int | float | None = "sqrt"
     random_state: int | None = None
     n_jobs: int | None = None
+    encoder_kwargs: dict[str, object] = field(default_factory=dict)
     estimator_kwargs: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -88,7 +89,7 @@ class SpatialRandomForestClassifier:
     def fit_dataset(self, dataset: PatternDataset) -> "SpatialRandomForestClassifier":
         if dataset.target is None:
             raise ValueError("dataset target is required")
-        self.feature_encoder_ = PatternEncoder().fit(dataset.patterns)
+        self.feature_encoder_ = PatternEncoder(**self.encoder_kwargs).fit(dataset.patterns)
         self.estimator.fit(self.feature_encoder_.transform(dataset.patterns), dataset.target)
         return self
 
@@ -196,6 +197,7 @@ class SpatialRandomForestRegressor:
     max_features: str | int | float | None = 1.0
     random_state: int | None = None
     n_jobs: int | None = None
+    encoder_kwargs: dict[str, object] = field(default_factory=dict)
     estimator_kwargs: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -230,7 +232,7 @@ class SpatialRandomForestRegressor:
     def fit_dataset(self, dataset: PatternDataset) -> "SpatialRandomForestRegressor":
         if dataset.target is None:
             raise ValueError("dataset target is required")
-        self.feature_encoder_ = PatternEncoder().fit(dataset.patterns)
+        self.feature_encoder_ = PatternEncoder(**self.encoder_kwargs).fit(dataset.patterns)
         self.estimator.fit(
             self.feature_encoder_.transform(dataset.patterns),
             dataset.target.astype(float),

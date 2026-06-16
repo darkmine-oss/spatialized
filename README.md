@@ -1,10 +1,13 @@
 # spatialized
 
-`spatialized` implements data-preparation building blocks for spatial random
-forests: extracting local spatial patterns around grid cells, flattening them into
-predictor rows, and optionally adding 90/180/270 degree rotation variants.
+Spatial random forest workflows for gridded geoscience data.
 
-The technique follows the vectorised spatial pattern preparation described in:
+`spatialized` turns local raster neighbourhoods into vectorised spatial patterns,
+then uses those patterns for classification, regression, unsupervised clustering,
+full-grid GeoTIFF prediction, entropy maps, and feature-importance zone-of-
+influence maps.
+
+The core spatial-pattern technique follows:
 
 > Hassan Talebi, Luk J. M. Peeters, Alex Otto, Raimon Tolosana-Delgado (2022).
 > A Truly Spatial Random Forests Algorithm for Geoscience Data Analysis and
@@ -12,130 +15,99 @@ The technique follows the vectorised spatial pattern preparation described in:
 > https://doi.org/10.1007/s11004-021-09946-w
 
 This implementation is based on the paper and an authorised review of the
-original R code with permission from first author Hassan Talebi. The original
-source material and paper test data are not distributed in this repository.
+original R code with permission from first author Hassan Talebi. Original source
+material and paper test data are not distributed in this repository.
 
-## Current scope
-
-The current implementation is focused on vectorised spatial data preparation. It
-also includes thin classifier/regressor wrappers around scikit-learn random
-forests. It does not yet read/write GeoTIFFs directly.
-
-Install modelling support with:
+## Install
 
 ```bash
-pip install "spatialized[model,raster]"
+pip install "spatialized[full]"
 ```
+
+## Train and Predict
 
 ```python
 import numpy as np
 
-from spatialized import SpatialLayer, prepare_patterns
-
-mag = SpatialLayer("mag", np.arange(25, dtype=float).reshape(5, 5), window_size=3)
-grav = SpatialLayer("grav", np.arange(100, 125, dtype=float).reshape(5, 5), window_size=3)
-
-patterns = prepare_patterns([mag, grav], centers=[(2, 2)], rotations=True)
-
-# 4 rows: original, 90, 180, and 270 degree variants.
-# 18 columns: 9 mag cells followed by 9 gravity cells.
-print(patterns.shape)
-```
-
-For larger prediction grids, build centers from a boolean mask and prepare them in
-chunks:
-
-```python
-from spatialized import centers_from_mask, grid_from_centers, iter_pattern_batches
-
-centers = centers_from_mask(np.isnan(prediction_grid))
-
-for batch in iter_pattern_batches([mag, grav], centers, chunk_size=10_000):
-    print(batch.centers.shape, batch.patterns.shape)
-
-predicted_grid = grid_from_centers(prediction_grid.shape, centers, predicted_classes)
-```
-
-For supervised training data, responses are repeated to match rotation-augmented
-rows:
-
-```python
-from spatialized import prepare_training_data
-
-dataset = prepare_training_data(
-    [mag, grav],
-    centers=[(2, 2)],
-    target=["class-a"],
-    rotations=True,
+from spatialized import (
+    SpatialRandomForestClassifier,
+    centers_from_mask,
+    predict_grid_to_raster,
+    read_raster,
+    read_spatial_layer,
 )
-
-print(dataset.patterns.shape, dataset.target)
-```
-
-Raster metadata can be adapted from common north-up transform formats:
-
-```python
-from spatialized import GridTransform
-
-prediction_transform = GridTransform.from_gdal((500000, 25, 0, 7000000, 0, -25))
-```
-
-GeoTIFF rasters can be read and written with the optional raster extra:
-
-```python
-from spatialized import read_raster, read_spatial_layer, write_raster
 
 mag = read_spatial_layer("mag.tif", window_size=7)
 grav = read_spatial_layer("gravity.tif", window_size=5)
+prediction = read_raster("prediction-grid.tif", masked=True)
 
-write_raster("classes.tif", predicted_grid, reference=read_raster("prediction.tif"))
-```
-
-Train a spatial random forest classifier from vectorised patterns:
-
-```python
-from spatialized import SpatialRandomForestClassifier, predict_grid_to_raster
+training_centers = np.array([[120, 240], [380, 410], [615, 190]])
+training_labels = np.array(["class-a", "class-b", "class-a"])
 
 model = SpatialRandomForestClassifier(n_estimators=500, random_state=42)
-model.fit([mag, grav], centers=[(2, 2)], target=["class-a"], rotations=True)
-
-classes = model.predict([mag, grav], centers=[(2, 2)])
-entropy = model.entropy([mag, grav], centers=[(2, 2)])
-zones = model.zone_of_influence([mag, grav])
-
-for batch in model.iter_predict([mag, grav], centers, chunk_size=10_000, entropy=True):
-    print(batch.centers.shape, batch.prediction.shape, batch.entropy.shape)
+model.fit([mag, grav], training_centers, training_labels, rotations=True)
 
 predict_grid_to_raster(
     model,
     [mag, grav],
-    prediction_mask=np.isnan(prediction_grid),
-    reference=read_raster("prediction.tif"),
+    prediction_mask=np.isnan(prediction.values),
+    reference=prediction,
     output_path="classes.tif",
     entropy_path="entropy.tif",
+    chunk_size=10_000,
 )
 ```
 
-Run the initial unsupervised SRF workflow:
+## Unsupervised Clustering
 
 ```python
 from spatialized import UnsupervisedSpatialRandomForest
 
+centers = centers_from_mask(np.isnan(prediction.values))
+
 unsupervised = UnsupervisedSpatialRandomForest(n_estimators=500, random_state=42)
 unsupervised.fit([mag, grav], centers, rotations=True)
 
-distance = unsupervised.distance_
 clusters = unsupervised.spectral_cluster(n_clusters=4)
 embedding = unsupervised.mds(n_components=2)
+distance = unsupervised.distance_
 ```
 
-Feature importance can be mapped back onto each layer's local spatial pattern:
+## Feature Importance
 
 ```python
 importance = model.feature_importance()
 zones = model.zone_of_influence([mag, grav])
+
+mag_zone = zones["mag"]
+grav_zone = zones["gravity"]
 ```
 
-Categorical raster values are supported through the model wrappers. Object/string
-pattern columns are encoded during fitting and the same mappings are reused for
-prediction.
+## CLI
+
+```bash
+spatialized feature-layout \
+  --layer mag:7 \
+  --layer gravity:5 \
+  --rotations \
+  --output feature-layout.json
+
+spatialized predict-grid \
+  --model model.pkl \
+  --layer mag:mag.tif:7 \
+  --layer gravity:gravity.tif:5 \
+  --mask-raster prediction-grid.tif \
+  --mask-mode nan \
+  --output classes.tif \
+  --entropy-output entropy.tif
+```
+
+## Notes
+
+- Numeric and categorical raster values are supported by the model wrappers.
+- Missing values are handled by configurable encoder strategies, including
+  constant, numeric mean, and categorical most-frequent fills.
+- GeoTIFF I/O is optional and uses `rasterio`.
+- The unsupervised workflow is currently a practical scikit-learn analogue of the
+  original `randomForestSRC(distance = "all")` workflow; exact parity still needs
+  validation against Paper Author data.
