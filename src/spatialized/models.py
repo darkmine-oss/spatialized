@@ -7,14 +7,17 @@ from typing import Iterable, Sequence
 
 import numpy as np
 
+from .encoding import PatternEncoder
 from .patterns import (
     Center,
     GridTransform,
     PatternDataset,
     SpatialLayer,
+    feature_layout,
     iter_centers,
     prepare_patterns,
     prepare_training_data,
+    zone_of_influence,
 )
 
 
@@ -85,7 +88,8 @@ class SpatialRandomForestClassifier:
     def fit_dataset(self, dataset: PatternDataset) -> "SpatialRandomForestClassifier":
         if dataset.target is None:
             raise ValueError("dataset target is required")
-        self.estimator.fit(dataset.patterns, dataset.target)
+        self.feature_encoder_ = PatternEncoder().fit(dataset.patterns)
+        self.estimator.fit(self.feature_encoder_.transform(dataset.patterns), dataset.target)
         return self
 
     def predict(
@@ -101,7 +105,7 @@ class SpatialRandomForestClassifier:
             prediction_transform=prediction_transform,
             rotations=False,
         )
-        return self.estimator.predict(patterns)
+        return self.estimator.predict(self._transform_patterns(patterns))
 
     def iter_predict(
         self,
@@ -120,8 +124,9 @@ class SpatialRandomForestClassifier:
                 prediction_transform=prediction_transform,
                 rotations=False,
             )
-            prediction = self.estimator.predict(patterns)
-            proba = self.estimator.predict_proba(patterns) if probabilities or entropy else None
+            encoded = self._transform_patterns(patterns)
+            prediction = self.estimator.predict(encoded)
+            proba = self.estimator.predict_proba(encoded) if probabilities or entropy else None
             yield PredictionBatch(
                 centers=center_chunk,
                 prediction=prediction,
@@ -142,7 +147,7 @@ class SpatialRandomForestClassifier:
             prediction_transform=prediction_transform,
             rotations=False,
         )
-        return self.estimator.predict_proba(patterns)
+        return self.estimator.predict_proba(self._transform_patterns(patterns))
 
     def entropy(
         self,
@@ -158,6 +163,29 @@ class SpatialRandomForestClassifier:
                 prediction_transform=prediction_transform,
             )
         )
+
+    def feature_importance(self) -> np.ndarray:
+        """Return fitted per-feature impurity importances."""
+
+        return np.asarray(self.estimator.feature_importances_, dtype=float)
+
+    def zone_of_influence(self, layers: Sequence[SpatialLayer]) -> dict[str, np.ndarray]:
+        """Map fitted feature importances back to each layer's local pattern."""
+
+        return zone_of_influence(self.feature_importance(), layers)
+
+    def feature_layout(self, layers: Sequence[SpatialLayer]):
+        """Return feature-column metadata for the model input layers."""
+
+        layout = feature_layout(layers)
+        if len(layout) != self.estimator.n_features_in_:
+            raise ValueError("layer feature layout does not match fitted model")
+        return layout
+
+    def _transform_patterns(self, patterns: np.ndarray) -> np.ndarray:
+        if not hasattr(self, "feature_encoder_"):
+            raise ValueError("model has not been fitted")
+        return self.feature_encoder_.transform(patterns)
 
 
 @dataclass
@@ -202,7 +230,11 @@ class SpatialRandomForestRegressor:
     def fit_dataset(self, dataset: PatternDataset) -> "SpatialRandomForestRegressor":
         if dataset.target is None:
             raise ValueError("dataset target is required")
-        self.estimator.fit(dataset.patterns, dataset.target.astype(float))
+        self.feature_encoder_ = PatternEncoder().fit(dataset.patterns)
+        self.estimator.fit(
+            self.feature_encoder_.transform(dataset.patterns),
+            dataset.target.astype(float),
+        )
         return self
 
     def predict(
@@ -218,7 +250,7 @@ class SpatialRandomForestRegressor:
             prediction_transform=prediction_transform,
             rotations=False,
         )
-        return self.estimator.predict(patterns)
+        return self.estimator.predict(self._transform_patterns(patterns))
 
     def iter_predict(
         self,
@@ -237,5 +269,28 @@ class SpatialRandomForestRegressor:
             )
             yield PredictionBatch(
                 centers=center_chunk,
-                prediction=self.estimator.predict(patterns),
+                prediction=self.estimator.predict(self._transform_patterns(patterns)),
             )
+
+    def feature_importance(self) -> np.ndarray:
+        """Return fitted per-feature impurity importances."""
+
+        return np.asarray(self.estimator.feature_importances_, dtype=float)
+
+    def zone_of_influence(self, layers: Sequence[SpatialLayer]) -> dict[str, np.ndarray]:
+        """Map fitted feature importances back to each layer's local pattern."""
+
+        return zone_of_influence(self.feature_importance(), layers)
+
+    def feature_layout(self, layers: Sequence[SpatialLayer]):
+        """Return feature-column metadata for the model input layers."""
+
+        layout = feature_layout(layers)
+        if len(layout) != self.estimator.n_features_in_:
+            raise ValueError("layer feature layout does not match fitted model")
+        return layout
+
+    def _transform_patterns(self, patterns: np.ndarray) -> np.ndarray:
+        if not hasattr(self, "feature_encoder_"):
+            raise ValueError("model has not been fitted")
+        return self.feature_encoder_.transform(patterns)

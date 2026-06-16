@@ -101,6 +101,7 @@ model.fit([mag, grav], centers=[(2, 2)], target=["class-a"], rotations=True)
 
 classes = model.predict([mag, grav], centers=[(2, 2)])
 entropy = model.entropy([mag, grav], centers=[(2, 2)])
+zones = model.zone_of_influence([mag, grav])
 
 for batch in model.iter_predict([mag, grav], centers, chunk_size=10_000, entropy=True):
     print(batch.centers.shape, batch.prediction.shape, batch.entropy.shape)
@@ -127,3 +128,14 @@ distance = unsupervised.distance_
 clusters = unsupervised.spectral_cluster(n_clusters=4)
 embedding = unsupervised.mds(n_components=2)
 ```
+
+Feature importance can be mapped back onto each layer's local spatial pattern:
+
+```python
+importance = model.feature_importance()
+zones = model.zone_of_influence([mag, grav])
+```
+
+Categorical raster values are supported through the model wrappers. Object/string
+pattern columns are encoded during fitting and the same mappings are reused for
+prediction.

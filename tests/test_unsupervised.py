@@ -45,6 +45,27 @@ def test_unsupervised_spatial_random_forest_builds_center_distance():
     assert np.all((distance >= 0) & (distance <= 1))
 
 
+def test_unsupervised_spatial_random_forest_encodes_categorical_layers():
+    layer = SpatialLayer(
+        "lithology",
+        np.array(
+            [
+                ["basalt", "basalt", "granite", "granite"],
+                ["basalt", "basalt", "granite", "granite"],
+            ],
+            dtype=object,
+        ),
+        window_size=1,
+    )
+    centers = [(0, 0), (0, 1), (0, 2), (0, 3)]
+
+    model = UnsupervisedSpatialRandomForest(n_estimators=20, random_state=7, n_jobs=1)
+    model.fit([layer], centers, rotations=False)
+
+    assert model.distance_.shape == (4, 4)
+    assert model.feature_encoder_.columns_[0].kind == "categorical"
+
+
 def test_unsupervised_spectral_cluster_and_mds_return_center_outputs():
     layer = SpatialLayer(
         "x",

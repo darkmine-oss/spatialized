@@ -8,6 +8,7 @@ from spatialized import (
     SpatialLayer,
     centers_from_mask,
     centers_from_shape,
+    feature_layout,
     grid_from_centers,
     iter_centers,
     iter_pattern_batches,
@@ -15,6 +16,7 @@ from spatialized import (
     prepare_patterns,
     prepare_training_data,
     vectorize_layer,
+    zone_of_influence,
 )
 
 
@@ -74,6 +76,36 @@ def test_prepare_patterns_concatenates_layers():
     np.testing.assert_array_equal(result[0, :9], [6, 7, 8, 11, 12, 13, 16, 17, 18])
     np.testing.assert_array_equal(
         result[0, 9:], [106, 107, 108, 111, 112, 113, 116, 117, 118]
+    )
+
+
+def test_feature_layout_describes_layer_offsets_and_sparse_cells():
+    first = SpatialLayer("dense", np.zeros((3, 3)), window_size=3)
+    second = SpatialLayer("sparse", np.zeros((3, 3)), window_size=3, sparse_indices=[0, 4, 8])
+
+    layout = feature_layout([first, second])
+
+    assert len(layout) == 12
+    assert layout.layer_names() == ("dense", "sparse")
+    np.testing.assert_array_equal(layout.indices_for_layer("sparse"), [9, 10, 11])
+    assert layout.features[9].layer_name == "sparse"
+    assert layout.features[9].window_row == 0
+    assert layout.features[9].window_col == 0
+    assert layout.features[11].window_row == 2
+    assert layout.features[11].window_col == 2
+
+
+def test_zone_of_influence_reconstructs_per_layer_windows():
+    first = SpatialLayer("dense", np.zeros((3, 3)), window_size=3)
+    second = SpatialLayer("sparse", np.zeros((3, 3)), window_size=3, sparse_indices=[0, 4, 8])
+    importances = np.arange(12, dtype=float)
+
+    zones = zone_of_influence(importances, [first, second])
+
+    np.testing.assert_array_equal(zones["dense"], np.arange(9, dtype=float).reshape(3, 3))
+    np.testing.assert_array_equal(
+        zones["sparse"],
+        np.array([[9, 0, 0], [0, 10, 0], [0, 0, 11]], dtype=float),
     )
 
 

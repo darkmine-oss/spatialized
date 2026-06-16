@@ -7,6 +7,7 @@ from typing import Iterable, Sequence
 
 import numpy as np
 
+from .encoding import PatternEncoder
 from .patterns import Center, GridTransform, SpatialLayer, prepare_patterns
 
 
@@ -78,7 +79,10 @@ class UnsupervisedSpatialRandomForest:
             rotations=rotations,
         )
         synthetic = synthetic_patterns(patterns, random_state=self.random_state)
-        x = np.vstack([patterns, synthetic])
+        self.feature_encoder_ = PatternEncoder().fit(np.vstack([patterns, synthetic]))
+        encoded_patterns = self.feature_encoder_.transform(patterns)
+        encoded_synthetic = self.feature_encoder_.transform(synthetic)
+        x = np.vstack([encoded_patterns, encoded_synthetic])
         y = np.concatenate(
             [
                 np.ones(patterns.shape[0], dtype=int),
@@ -91,7 +95,7 @@ class UnsupervisedSpatialRandomForest:
             patterns=patterns,
             synthetic_patterns=synthetic,
             distance=_center_distance_from_leaves(
-                self.estimator.apply(patterns),
+                self.estimator.apply(encoded_patterns),
                 n_centers=len(center_array),
                 rotations=4 if rotations else 1,
             ),

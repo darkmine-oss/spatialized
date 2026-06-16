@@ -36,6 +36,41 @@ def test_spatial_random_forest_classifier_fits_prepared_patterns():
     assert entropy.shape == (4,)
 
 
+def test_spatial_random_forest_classifier_encodes_categorical_layers():
+    layer = SpatialLayer(
+        "lithology",
+        np.array([["basalt", "basalt"], ["granite", "granite"]], dtype=object),
+        window_size=1,
+    )
+    centers = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    target = ["mafic", "mafic", "felsic", "felsic"]
+
+    model = SpatialRandomForestClassifier(n_estimators=30, random_state=7)
+    model.fit([layer], centers, target, rotations=False)
+
+    prediction = model.predict([layer], centers)
+
+    np.testing.assert_array_equal(prediction, target)
+    assert model.feature_encoder_.columns_[0].kind == "categorical"
+    assert model.feature_encoder_.columns_[0].categories == ("basalt", "granite")
+
+
+def test_model_feature_importance_and_zone_of_influence():
+    layer = SpatialLayer("x", np.arange(25, dtype=float).reshape(5, 5), window_size=3)
+    centers = [(1, 1), (1, 2), (2, 1), (2, 2), (3, 3)]
+    target = [0, 0, 1, 1, 1]
+
+    model = SpatialRandomForestClassifier(n_estimators=30, random_state=7)
+    model.fit([layer], centers, target, rotations=False)
+
+    importance = model.feature_importance()
+    zones = model.zone_of_influence([layer])
+
+    assert importance.shape == (9,)
+    assert zones["x"].shape == (3, 3)
+    np.testing.assert_allclose(zones["x"].ravel(), importance)
+
+
 def test_spatial_random_forest_classifier_iter_predict_chunks_outputs():
     layer = SpatialLayer("x", np.array([[0, 0], [1, 1]], dtype=float), window_size=1)
     centers = [(0, 0), (0, 1), (1, 0), (1, 1)]
@@ -78,6 +113,24 @@ def test_spatial_random_forest_regressor_fits_prepared_patterns():
     assert prediction.shape == (4,)
     assert np.all(np.isfinite(prediction))
     assert np.corrcoef(prediction, target)[0, 1] > 0.9
+
+
+def test_spatial_random_forest_regressor_encodes_categorical_layers():
+    layer = SpatialLayer(
+        "class",
+        np.array([["low", "low"], ["high", "high"]], dtype=object),
+        window_size=1,
+    )
+    centers = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    target = np.array([1.0, 1.0, 10.0, 10.0])
+
+    model = SpatialRandomForestRegressor(n_estimators=40, random_state=7)
+    model.fit([layer], centers, target, rotations=False)
+
+    prediction = model.predict([layer], centers)
+
+    assert prediction[:2].mean() < prediction[2:].mean()
+    assert model.feature_encoder_.columns_[0].kind == "categorical"
 
 
 def test_spatial_random_forest_regressor_iter_predict_chunks_outputs():

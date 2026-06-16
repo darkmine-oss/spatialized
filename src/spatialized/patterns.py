@@ -125,6 +125,37 @@ class PatternDataset:
     target: np.ndarray | None = None
 
 
+@dataclass(frozen=True)
+class FeatureSpec:
+    """Metadata for one flattened spatial-pattern feature."""
+
+    index: int
+    layer_name: str
+    layer_index: int
+    window_row: int
+    window_col: int
+    source_index: int
+
+
+@dataclass(frozen=True)
+class FeatureLayout:
+    """Column layout for a multivariate vectorised pattern matrix."""
+
+    features: tuple[FeatureSpec, ...]
+
+    def __len__(self) -> int:
+        return len(self.features)
+
+    def layer_names(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(feature.layer_name for feature in self.features))
+
+    def indices_for_layer(self, layer_name: str) -> np.ndarray:
+        return np.array(
+            [feature.index for feature in self.features if feature.layer_name == layer_name],
+            dtype=int,
+        )
+
+
 def pattern_size_from_edge(edge: float, cell_size: float) -> int:
     """Return the square pattern width used by the original R implementation.
 
@@ -139,6 +170,54 @@ def pattern_size_from_edge(edge: float, cell_size: float) -> int:
     size = int(np.floor((edge * 2) / cell_size))
     _validate_window_size(size)
     return size
+
+
+def feature_layout(layers: Sequence[SpatialLayer]) -> FeatureLayout:
+    """Return feature-column metadata for the provided layer sequence."""
+
+    features: list[FeatureSpec] = []
+    column = 0
+    for layer_index, layer in enumerate(layers):
+        source_indices = _layer_source_indices(layer)
+        for source_index in source_indices:
+            features.append(
+                FeatureSpec(
+                    index=column,
+                    layer_name=layer.name,
+                    layer_index=layer_index,
+                    window_row=int(source_index // layer.window_size),
+                    window_col=int(source_index % layer.window_size),
+                    source_index=int(source_index),
+                )
+            )
+            column += 1
+    return FeatureLayout(tuple(features))
+
+
+def zone_of_influence(
+    importances: Sequence[float] | np.ndarray,
+    layers: Sequence[SpatialLayer],
+    *,
+    fill_value: float = 0.0,
+) -> dict[str, np.ndarray]:
+    """Reshape feature importances into one local window per layer."""
+
+    layout = feature_layout(layers)
+    importance_array = np.asarray(importances, dtype=float)
+    if importance_array.ndim != 1:
+        raise ValueError("importances must be one-dimensional")
+    if len(importance_array) != len(layout):
+        raise ValueError("importances length must match feature layout length")
+
+    zones = {
+        layer.name: np.full((layer.window_size, layer.window_size), fill_value, dtype=float)
+        for layer in layers
+    }
+    for feature in layout.features:
+        zones[feature.layer_name][feature.window_row, feature.window_col] = importance_array[
+            feature.index
+        ]
+    return zones
 
 
 def centers_from_shape(shape: tuple[int, int]) -> np.ndarray:
@@ -439,3 +518,9 @@ def _normalise_sparse_indices(indices: Sequence[int], window_size: int) -> np.nd
     if np.any(sparse < 0) or np.any(sparse >= max_index):
         raise ValueError(f"sparse_indices must be between 0 and {max_index - 1}")
     return sparse.astype(int)
+
+
+def _layer_source_indices(layer: SpatialLayer) -> np.ndarray:
+    if layer.sparse_indices is None:
+        return np.arange(layer.window_size * layer.window_size)
+    return _normalise_sparse_indices(layer.sparse_indices, layer.window_size)
