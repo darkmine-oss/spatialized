@@ -31,3 +31,8 @@ test = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/spatialized"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+  "ignore:Could not find the number of physical cores:UserWarning:joblib\\.externals\\.loky\\.backend\\.context",
+]

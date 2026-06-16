@@ -22,6 +22,11 @@ from .patterns import (
     vectorize_layer,
 )
 from .raster import RasterGrid, read_raster, read_spatial_layer, write_raster
+from .unsupervised import (
+    UnsupervisedResult,
+    UnsupervisedSpatialRandomForest,
+    synthetic_patterns,
+)
 from .workflows import GridPrediction, predict_grid, predict_grid_to_raster
 
 __all__ = [
@@ -34,6 +39,8 @@ __all__ = [
     "SpatialRandomForestClassifier",
     "SpatialRandomForestRegressor",
     "SpatialLayer",
+    "UnsupervisedResult",
+    "UnsupervisedSpatialRandomForest",
     "centers_from_mask",
     "centers_from_shape",
     "classification_entropy",
@@ -47,6 +54,7 @@ __all__ = [
     "predict_grid_to_raster",
     "read_raster",
     "read_spatial_layer",
+    "synthetic_patterns",
     "vectorize_layer",
     "write_raster",
 ]

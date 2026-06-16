@@ -114,3 +114,16 @@ predict_grid_to_raster(
     entropy_path="entropy.tif",
 )
 ```
+
+Run the initial unsupervised SRF workflow:
+
+```python
+from spatialized import UnsupervisedSpatialRandomForest
+
+unsupervised = UnsupervisedSpatialRandomForest(n_estimators=500, random_state=42)
+unsupervised.fit([mag, grav], centers, rotations=True)
+
+distance = unsupervised.distance_
+clusters = unsupervised.spectral_cluster(n_clusters=4)
+embedding = unsupervised.mds(n_components=2)
+```
