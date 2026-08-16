@@ -36,6 +36,51 @@ def classification_entropy(probabilities: np.ndarray) -> np.ndarray:
     return entropy
 
 
+def regression_residuals(observed: np.ndarray, predicted: np.ndarray) -> np.ndarray:
+    """Return ``predicted - observed`` residuals for regression diagnostics."""
+
+    observed_array = np.asarray(observed, dtype=float)
+    predicted_array = np.asarray(predicted, dtype=float)
+    if observed_array.shape != predicted_array.shape:
+        raise ValueError("observed and predicted must have the same shape")
+    return predicted_array - observed_array
+
+
+def regression_r2_score(observed: np.ndarray, predicted: np.ndarray) -> float:
+    """Return the coefficient of determination R^2.
+
+    Matches the ``1 - SSE / SST`` formula the original R workflows use to
+    report SRF versus classical RF performance.
+    """
+
+    observed_array = np.asarray(observed, dtype=float)
+    predicted_array = np.asarray(predicted, dtype=float)
+    if observed_array.shape != predicted_array.shape:
+        raise ValueError("observed and predicted must have the same shape")
+    sse = np.sum((observed_array - predicted_array) ** 2)
+    sst = np.sum((observed_array - np.mean(observed_array)) ** 2)
+    return float(1.0 - sse / sst)
+
+
+def _layer_spans_for(layers: Sequence[SpatialLayer]) -> tuple[tuple[int, int], ...]:
+    layout = feature_layout(layers)
+    return tuple((layer.start, layer.stop) for layer in layout.layers)
+
+
+def _resolve_encoder_kwargs(
+    encoder_kwargs: dict[str, object],
+    layers: Sequence[SpatialLayer] | None,
+) -> dict[str, object]:
+    resolved = dict(encoder_kwargs)
+    if (
+        resolved.get("numeric_missing_strategy") == "window_mean"
+        and "layer_spans" not in resolved
+        and layers is not None
+    ):
+        resolved["layer_spans"] = _layer_spans_for(layers)
+    return resolved
+
+
 @dataclass(frozen=True)
 class PredictionBatch:
     """A chunk of prediction centers and model outputs."""
@@ -84,13 +129,20 @@ class SpatialRandomForestClassifier:
             prediction_transform=prediction_transform,
             rotations=rotations,
         )
-        return self.fit_dataset(dataset)
+        return self.fit_dataset(dataset, layers=layers)
 
-    def fit_dataset(self, dataset: PatternDataset) -> "SpatialRandomForestClassifier":
+    def fit_dataset(
+        self,
+        dataset: PatternDataset,
+        *,
+        layers: Sequence[SpatialLayer] | None = None,
+    ) -> "SpatialRandomForestClassifier":
         if dataset.target is None:
             raise ValueError("dataset target is required")
-        self.feature_encoder_ = PatternEncoder(**self.encoder_kwargs).fit(dataset.patterns)
+        encoder_kwargs = _resolve_encoder_kwargs(self.encoder_kwargs, layers)
+        self.feature_encoder_ = PatternEncoder(**encoder_kwargs).fit(dataset.patterns)
         self.estimator.fit(self.feature_encoder_.transform(dataset.patterns), dataset.target)
+        self.target_ = np.asarray(dataset.target)
         return self
 
     def predict(
@@ -183,6 +235,36 @@ class SpatialRandomForestClassifier:
             raise ValueError("layer feature layout does not match fitted model")
         return layout
 
+    def oob_decision_function(self) -> np.ndarray:
+        """Return out-of-bag class probabilities.
+
+        Requires the model to have been fit with
+        ``estimator_kwargs={"oob_score": True, "bootstrap": True}``.
+        """
+
+        if not hasattr(self, "feature_encoder_"):
+            raise ValueError("model has not been fitted")
+        if not hasattr(self.estimator, "oob_decision_function_"):
+            raise ValueError(
+                "out-of-bag predictions are unavailable; fit with "
+                "estimator_kwargs={'oob_score': True, 'bootstrap': True}"
+            )
+        return np.asarray(self.estimator.oob_decision_function_)
+
+    def oob_prediction(self) -> np.ndarray:
+        """Return out-of-bag class predictions (argmax of ``oob_decision_function``)."""
+
+        proba = self.oob_decision_function()
+        classes = np.asarray(self.estimator.classes_)
+        return classes[np.nanargmax(proba, axis=1)]
+
+    def oob_accuracy_score(self) -> float:
+        """Return out-of-bag accuracy against the fitted training target."""
+
+        from sklearn.metrics import accuracy_score
+
+        return float(accuracy_score(self.target_, self.oob_prediction()))
+
     def _transform_patterns(self, patterns: np.ndarray) -> np.ndarray:
         if not hasattr(self, "feature_encoder_"):
             raise ValueError("model has not been fitted")
@@ -227,16 +309,24 @@ class SpatialRandomForestRegressor:
             prediction_transform=prediction_transform,
             rotations=rotations,
         )
-        return self.fit_dataset(dataset)
+        return self.fit_dataset(dataset, layers=layers)
 
-    def fit_dataset(self, dataset: PatternDataset) -> "SpatialRandomForestRegressor":
+    def fit_dataset(
+        self,
+        dataset: PatternDataset,
+        *,
+        layers: Sequence[SpatialLayer] | None = None,
+    ) -> "SpatialRandomForestRegressor":
         if dataset.target is None:
             raise ValueError("dataset target is required")
-        self.feature_encoder_ = PatternEncoder(**self.encoder_kwargs).fit(dataset.patterns)
+        encoder_kwargs = _resolve_encoder_kwargs(self.encoder_kwargs, layers)
+        self.feature_encoder_ = PatternEncoder(**encoder_kwargs).fit(dataset.patterns)
+        target = dataset.target.astype(float)
         self.estimator.fit(
             self.feature_encoder_.transform(dataset.patterns),
-            dataset.target.astype(float),
+            target,
         )
+        self.target_ = target
         return self
 
     def predict(
@@ -291,6 +381,29 @@ class SpatialRandomForestRegressor:
         if len(layout) != self.estimator.n_features_in_:
             raise ValueError("layer feature layout does not match fitted model")
         return layout
+
+    def oob_prediction(self) -> np.ndarray:
+        """Return out-of-bag predictions.
+
+        Requires the model to have been fit with
+        ``estimator_kwargs={"oob_score": True, "bootstrap": True}``, matching
+        the out-of-bag residual diagnostics the original R workflows compute
+        via ``rfsrc(..., ...)$predicted.oob``.
+        """
+
+        if not hasattr(self, "feature_encoder_"):
+            raise ValueError("model has not been fitted")
+        if not hasattr(self.estimator, "oob_prediction_"):
+            raise ValueError(
+                "out-of-bag predictions are unavailable; fit with "
+                "estimator_kwargs={'oob_score': True, 'bootstrap': True}"
+            )
+        return np.asarray(self.estimator.oob_prediction_)
+
+    def oob_r2_score(self) -> float:
+        """Return the out-of-bag R^2 score against the fitted training target."""
+
+        return regression_r2_score(self.target_, self.oob_prediction())
 
     def _transform_patterns(self, patterns: np.ndarray) -> np.ndarray:
         if not hasattr(self, "feature_encoder_"):

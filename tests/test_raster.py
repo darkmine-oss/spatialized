@@ -37,6 +37,51 @@ def test_read_raster_preserves_values_and_metadata(tmp_path):
     assert grid.shape == (2, 3)
 
 
+def test_read_raster_supports_pixel_window(tmp_path):
+    path = tmp_path / "input.tif"
+    values = np.arange(20, dtype=np.float32).reshape(4, 5)
+    transform = Affine(10, 0, 100, 0, -10, 200)
+
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=4,
+        width=5,
+        count=1,
+        dtype="float32",
+        transform=transform,
+    ) as dataset:
+        dataset.write(values, 1)
+
+    grid = read_raster(path, window=(1, 1, 2, 2))
+
+    np.testing.assert_array_equal(grid.values, values[1:3, 1:3])
+    assert grid.transform == GridTransform(left=110, top=190, x_size=10, y_size=10)
+
+
+def test_read_raster_supports_geographic_bounds(tmp_path):
+    path = tmp_path / "input.tif"
+    values = np.arange(20, dtype=np.float32).reshape(4, 5)
+    transform = Affine(10, 0, 100, 0, -10, 200)
+
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=4,
+        width=5,
+        count=1,
+        dtype="float32",
+        transform=transform,
+    ) as dataset:
+        dataset.write(values, 1)
+
+    grid = read_raster(path, bounds=(110, 180, 130, 200))
+
+    np.testing.assert_array_equal(grid.values, values[0:2, 1:3])
+
+
 def test_read_spatial_layer_builds_layer_from_raster(tmp_path):
     path = tmp_path / "layer.tif"
 

@@ -232,8 +232,10 @@ def pattern_size_from_edge(edge: float, cell_size: float) -> int:
 
     The R code computes ``floor(edge * 2 / cell_size)`` and then squares that
     value to obtain the number of cells in a square pattern. This helper returns
-    the one-dimensional width and requires it to be odd so the pattern has a
-    unique center cell.
+    the one-dimensional width. The result may be odd or even: the real R
+    workflows use both (e.g. odd widths for the unsupervised RTP/1VD patterns,
+    even widths for the NWMP geology and geochemistry case studies), and
+    ``SpatialLayer`` supports both.
     """
 
     if edge <= 0 or cell_size <= 0:
@@ -511,6 +513,12 @@ def _extract_windows(
     cols: np.ndarray,
     window_size: int,
 ) -> np.ndarray:
+    # For odd window_size the center row/col sits in the middle of the window.
+    # For even window_size (matching some of the original R workflows, e.g. a
+    # 10x10 pattern) there is no middle cell: radius cells are taken before the
+    # center and window_size - radius - 1 after it, which is the same
+    # convention as cropping a band of `window_size / 2` cells either side of a
+    # pixel center in the R `raster::crop`/`extend` based extraction.
     radius = window_size // 2
     pad_values = _values_for_padding(values)
     padded = np.pad(
@@ -596,8 +604,8 @@ def _grid_dtype(values: np.ndarray, fill_value: object) -> np.dtype:
 def _validate_window_size(window_size: int) -> None:
     if not isinstance(window_size, int):
         raise TypeError("window_size must be an integer")
-    if window_size < 1 or window_size % 2 != 1:
-        raise ValueError("window_size must be a positive odd integer")
+    if window_size < 1:
+        raise ValueError("window_size must be a positive integer")
 
 
 def _normalise_sparse_indices(indices: Sequence[int], window_size: int) -> np.ndarray:

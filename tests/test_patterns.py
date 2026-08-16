@@ -42,6 +42,23 @@ def test_vectorize_layer_flattens_square_window_row_wise():
     )
 
 
+def test_vectorize_layer_supports_even_window_size():
+    # Some of the original R workflows use even-width patterns (e.g. a 10x10
+    # window) with no unique center cell: `radius = window_size // 2` cells
+    # are taken before the target pixel and the rest after it.
+    layer = SpatialLayer("x", np.arange(36).reshape(6, 6), window_size=4)
+
+    result = vectorize_layer(layer, [(2, 2)])
+
+    np.testing.assert_array_equal(
+        result,
+        np.array(
+            [[0, 1, 2, 3, 6, 7, 8, 9, 12, 13, 14, 15, 18, 19, 20, 21]],
+            dtype=float,
+        ),
+    )
+
+
 def test_edges_are_padded_with_nan():
     layer = SpatialLayer("x", np.arange(9).reshape(3, 3), window_size=3)
 
@@ -252,6 +269,17 @@ def test_centers_outside_layer_bounds_raise():
 def test_pattern_size_from_edge_matches_r_formula():
     assert pattern_size_from_edge(edge=3.99, cell_size=1) == 7
     assert pattern_size_from_edge(edge=2.99, cell_size=1) == 5
+
+
+def test_pattern_size_from_edge_supports_even_widths():
+    # realCase2's Cu-regression workflow uses `myband <- res * 5`, giving a
+    # 10x10 (even) pattern: `floor(5 * 2 / 1) == 10`.
+    assert pattern_size_from_edge(edge=5, cell_size=1) == 10
+
+
+def test_window_size_rejects_non_positive_values():
+    with pytest.raises(ValueError, match="positive integer"):
+        SpatialLayer("x", np.zeros((3, 3)), window_size=0)
 
 
 def test_centers_from_shape_returns_row_major_grid():

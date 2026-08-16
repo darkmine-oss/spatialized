@@ -31,17 +31,30 @@ def read_raster(
     *,
     band: int = 1,
     masked: bool = False,
+    window: Sequence[int] | None = None,
+    bounds: Sequence[float] | None = None,
 ) -> RasterGrid:
-    """Read a single raster band into an array and lightweight metadata."""
+    """Read a single raster band into an array and lightweight metadata.
+
+    By default the whole raster is read. Pass ``window`` as
+    ``(col_off, row_off, width, height)`` in pixel coordinates, or ``bounds``
+    as ``(left, bottom, right, top)`` in the raster's CRS, to read a cropped
+    sub-extent without loading the full file into memory. Only one of
+    ``window``/``bounds`` may be given.
+    """
 
     rasterio = _import_rasterio()
     with rasterio.open(path) as dataset:
-        values = dataset.read(band, masked=masked)
+        read_window = _resolve_window(dataset, window=window, bounds=bounds)
+        values = dataset.read(band, masked=masked, window=read_window)
         if masked:
             values = values.filled(np.nan)
+        transform = (
+            dataset.transform if read_window is None else dataset.window_transform(read_window)
+        )
         return RasterGrid(
             values=np.asarray(values),
-            transform=GridTransform.from_affine(dataset.transform),
+            transform=GridTransform.from_affine(transform),
             crs=dataset.crs,
             nodata=dataset.nodata,
             profile=dataset.profile.copy(),
@@ -56,10 +69,17 @@ def read_spatial_layer(
     sparse_indices: Sequence[int] | None = None,
     band: int = 1,
     masked: bool = True,
+    window: Sequence[int] | None = None,
+    bounds: Sequence[float] | None = None,
 ) -> SpatialLayer:
-    """Read a raster band as a ``SpatialLayer``."""
+    """Read a raster band as a ``SpatialLayer``.
 
-    grid = read_raster(path, band=band, masked=masked)
+    ``window``/``bounds`` behave as in :func:`read_raster`, allowing a layer
+    to be built from a cropped sub-extent (e.g. to match a study area used by
+    an original R workflow) rather than the whole raster file.
+    """
+
+    grid = read_raster(path, band=band, masked=masked, window=window, bounds=bounds)
     layer_name = name if name is not None else Path(path).stem
     return SpatialLayer(
         name=layer_name,
@@ -68,6 +88,22 @@ def read_spatial_layer(
         transform=grid.transform,
         sparse_indices=sparse_indices,
     )
+
+
+def _resolve_window(dataset, *, window, bounds):
+    if window is not None and bounds is not None:
+        raise ValueError("specify only one of window or bounds")
+    if bounds is not None:
+        from rasterio.windows import from_bounds
+
+        left, bottom, right, top = bounds
+        return from_bounds(left, bottom, right, top, transform=dataset.transform)
+    if window is not None:
+        from rasterio.windows import Window
+
+        col_off, row_off, width, height = window
+        return Window(col_off, row_off, width, height)
+    return None
 
 
 def write_raster(

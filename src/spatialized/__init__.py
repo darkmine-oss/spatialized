@@ -13,6 +13,8 @@ from .models import (
     SpatialRandomForestClassifier,
     SpatialRandomForestRegressor,
     classification_entropy,
+    regression_r2_score,
+    regression_residuals,
 )
 from .patterns import (
     FeatureLayout,
@@ -96,6 +98,8 @@ __all__ = [
     "predict_unsupervised_domains",
     "read_raster",
     "read_spatial_layer",
+    "regression_r2_score",
+    "regression_residuals",
     "spectral_cluster",
     "synthetic_patterns",
     "train_target_proxy_classifier",

@@ -7,6 +7,8 @@ from spatialized import (
     SpatialRandomForestRegressor,
     classification_entropy,
     prepare_training_data,
+    regression_r2_score,
+    regression_residuals,
 )
 
 
@@ -166,6 +168,109 @@ def test_spatial_random_forest_regressor_iter_predict_chunks_outputs():
     np.testing.assert_array_equal(batches[0].centers, [[0, 0], [0, 1]])
     np.testing.assert_array_equal(batches[1].centers, [[1, 0], [1, 1]])
     assert np.concatenate([batch.prediction for batch in batches]).shape == (4,)
+
+
+def test_spatial_random_forest_regressor_oob_prediction_and_r2():
+    rng = np.random.default_rng(0)
+    values = rng.normal(size=(6, 6))
+    layer = SpatialLayer("x", values, window_size=1)
+    centers = [(row, col) for row in range(6) for col in range(6)]
+    target = values.ravel() * 2 + 1
+
+    model = SpatialRandomForestRegressor(
+        n_estimators=50,
+        random_state=7,
+        estimator_kwargs={"oob_score": True, "bootstrap": True},
+    )
+    model.fit([layer], centers, target, rotations=False)
+
+    oob_prediction = model.oob_prediction()
+
+    assert oob_prediction.shape == target.shape
+    assert model.oob_r2_score() > 0.0
+
+
+def test_spatial_random_forest_regressor_oob_prediction_requires_oob_score():
+    layer = SpatialLayer("x", np.arange(4, dtype=float).reshape(2, 2), window_size=1)
+    centers = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    target = np.array([0.0, 1.0, 2.0, 3.0])
+
+    model = SpatialRandomForestRegressor(n_estimators=10, random_state=7)
+    model.fit([layer], centers, target, rotations=False)
+
+    with pytest.raises(ValueError, match="oob_score"):
+        model.oob_prediction()
+
+
+def test_spatial_random_forest_classifier_oob_prediction_and_accuracy():
+    rng = np.random.default_rng(0)
+    values = rng.normal(size=(6, 6))
+    layer = SpatialLayer("x", values, window_size=1)
+    centers = [(row, col) for row in range(6) for col in range(6)]
+    target = np.where(values.ravel() > 0, "high", "low")
+
+    model = SpatialRandomForestClassifier(
+        n_estimators=50,
+        random_state=7,
+        estimator_kwargs={"oob_score": True, "bootstrap": True},
+    )
+    model.fit([layer], centers, target, rotations=False)
+
+    oob_prediction = model.oob_prediction()
+
+    assert oob_prediction.shape == target.shape
+    assert 0.0 <= model.oob_accuracy_score() <= 1.0
+
+
+def test_spatial_random_forest_classifier_oob_prediction_requires_oob_score():
+    layer = SpatialLayer("x", np.array([[0, 0], [1, 1]], dtype=float), window_size=1)
+    centers = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    target = ["low", "low", "high", "high"]
+
+    model = SpatialRandomForestClassifier(n_estimators=10, random_state=7)
+    model.fit([layer], centers, target, rotations=False)
+
+    with pytest.raises(ValueError, match="oob_score"):
+        model.oob_decision_function()
+
+
+def test_regression_r2_score_matches_r_formula():
+    observed = np.array([1.0, 2.0, 3.0, 4.0])
+    predicted = np.array([1.0, 2.0, 3.0, 4.0])
+
+    assert regression_r2_score(observed, predicted) == pytest.approx(1.0)
+
+    predicted_mean_only = np.full_like(observed, observed.mean())
+    assert regression_r2_score(observed, predicted_mean_only) == pytest.approx(0.0)
+
+
+def test_regression_residuals_is_predicted_minus_observed():
+    observed = np.array([1.0, 2.0, 3.0])
+    predicted = np.array([1.5, 1.5, 4.0])
+
+    np.testing.assert_allclose(regression_residuals(observed, predicted), [0.5, -0.5, 1.0])
+
+
+def test_spatial_random_forest_regressor_window_mean_imputation_is_wired_from_fit():
+    # Two layers with a 2x2 window each; some cells at the grid edge will be
+    # NaN-padded, exercising the auto-computed layer_spans wiring from fit().
+    layer_a = SpatialLayer("a", np.arange(9, dtype=float).reshape(3, 3), window_size=2)
+    layer_b = SpatialLayer("b", np.arange(9, 18, dtype=float).reshape(3, 3), window_size=2)
+    centers = [(0, 0), (1, 1), (2, 2)]
+    target = np.array([1.0, 2.0, 3.0])
+
+    model = SpatialRandomForestRegressor(
+        n_estimators=10,
+        random_state=7,
+        encoder_kwargs={"numeric_missing_strategy": "window_mean"},
+    )
+    model.fit([layer_a, layer_b], centers, target, rotations=False)
+
+    prediction = model.predict([layer_a, layer_b], centers)
+
+    assert prediction.shape == (3,)
+    assert np.all(np.isfinite(prediction))
+    assert model.feature_encoder_.layer_spans == ((0, 4), (4, 8))
 
 
 def test_fit_dataset_requires_target():
