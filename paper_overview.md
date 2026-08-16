@@ -199,18 +199,41 @@ It creates magnetic/gravity-like covariates, geology-like classes, SRF
 classification outputs, entropy rasters, zone-of-influence rasters, and
 unsupervised clusters.
 
+Real Paper Author R scripts and data are also now available (gitignored,
+not distributed in this repository) and have been used to validate this
+Python implementation directly against the original R workflow's own
+outputs — see `examples/validate_realcase2_cu_regression.py`,
+`examples/validate_realcase_geology_classification.py`,
+`examples/validate_unsupervised_srf_distance.py`, and `.features/PLAN.md`
+for current validation status per workflow (what matches closely, what's
+approximate and by how much, and what's still unvalidated).
+
 ## Repository Goal
 
-The goal of this repository is to provide spatial algorithms that are easy to
-run on real geoscience grids. SRF is the first algorithm family implemented, but
-the package should remain open to additional spatial algorithms that share the
-same practical workflow:
+**The primary goal of this repository is to reimplement the original R SRF
+workflow in Python as faithfully as possible** — not just capture its
+spirit, but reproduce its actual numerical behaviour where that's
+achievable, and clearly document the gap where it isn't (e.g. the
+unsupervised distance/clustering step, which is only moderately correlated
+with R's own output — see `.features/PLAN.md`). Concretely that means:
 
-1. Load or prepare spatial covariates.
-2. Build spatial features or neighbourhood context.
-3. Fit a spatial model.
-4. Predict over a grid.
-5. Export interpretable rasters and metadata.
+1. Match the original workflow's mechanics — window sizes (including R's
+   even, no-unique-center windows), rotation ordering, pattern flattening,
+   missing-value handling, entropy formulas — not just a "spatial ML"
+   workflow that produces plausible-looking outputs.
+2. Validate against the original R code and Paper Author data whenever
+   possible, using the R scripts' own saved or re-generated outputs as
+   ground truth, rather than only checking internal consistency.
+3. Where exact parity isn't practical (different underlying RF library
+   internals, R algorithm details not fully documented), say so explicitly
+   in code and docs rather than presenting an approximation as equivalent.
+
+Once R parity is well-established, the package should also remain open to
+additional spatial algorithms that share the same practical workflow (load
+covariates, build spatial features, fit, predict over a grid, export
+interpretable rasters and metadata) — but that is secondary to the
+R-matching goal above.
 
 Future overview documents can follow this same pattern: explain the method,
-describe suitable data, show when to use it, and include runnable code snippets.
+describe suitable data, show when to use it, include runnable code snippets,
+and state validation status against the original R implementation.

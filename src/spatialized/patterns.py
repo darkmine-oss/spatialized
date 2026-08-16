@@ -515,15 +515,19 @@ def _extract_windows(
 ) -> np.ndarray:
     # For odd window_size the center row/col sits in the middle of the window.
     # For even window_size (matching some of the original R workflows, e.g. a
-    # 10x10 pattern) there is no middle cell: radius cells are taken before the
-    # center and window_size - radius - 1 after it, which is the same
-    # convention as cropping a band of `window_size / 2` cells either side of a
-    # pixel center in the R `raster::crop`/`extend` based extraction.
-    radius = window_size // 2
+    # 10x10 pattern) there is no middle cell. The split is (window_size - 1)
+    # cells before the center and the rest after -- verified to match R's
+    # actual `raster::crop`/`extend` output exactly for a 10x10 window (4
+    # cells before, center, 5 after), not the naive symmetric split, by
+    # cross-checking against a real recovered R pattern
+    # (see examples/validate_realcase_geology_classification.py and
+    # .features/PLAN.md).
+    pad_before = (window_size - 1) // 2
+    pad_after = window_size - 1 - pad_before
     pad_values = _values_for_padding(values)
     padded = np.pad(
         pad_values,
-        pad_width=radius,
+        pad_width=((pad_before, pad_after), (pad_before, pad_after)),
         mode="constant",
         constant_values=np.nan,
     )

@@ -126,12 +126,45 @@ spatialized predict-grid \
   --entropy-output entropy.tif
 ```
 
+## Validation against the original R workflow
+
+The point of this package is to match the original R implementation, not just
+approximate its spirit. Real Paper Author R scripts and data (not distributed
+in this repository) have been used to validate two supervised cases end to
+end, comparing this package's output directly against the R scripts' own
+saved and re-generated outputs:
+
+- **Cu geochemistry regression** — `examples/validate_realcase2_cu_regression.py`.
+  Full-grid predictions correlate r>=0.85 with R's saved output raster; OOB
+  R^2 tracks the paper's reported value closely, and the qualitative finding
+  (spatial RF beats classical non-spatial RF) reproduces.
+- **Geology classification** — `examples/validate_realcase_geology_classification.py`.
+  Full-grid accuracy against the true labels matches R's within ~1
+  percentage point (77.1% vs 77.8%), and 92% of individual cell predictions
+  agree directly between the two implementations.
+
+The unsupervised workflow does **not** yet match this closely.
+`UnsupervisedSpatialRandomForest` uses the same real-vs-synthetic-pattern
+discrimination mechanism `randomForestSRC` documents itself using internally
+in unsupervised mode, but validating it against a real R distance matrix
+(`examples/validate_unsupervised_srf_distance.py`) shows only moderate
+correlation (Pearson r ~= 0.35) and weak-to-moderate cluster agreement
+(adjusted Rand index ~= 0.29) — see `.features/PLAN.md` ("Improve
+Unsupervised SRF Parity") for the full finding and open questions.
+
+See `.features/PLAN.md` for the current status of every workflow, including
+what's been validated, what's approximated and how, and what's still
+blocked on missing reference data.
+
 ## Notes
 
 - Numeric and categorical raster values are supported by the model wrappers.
-- Missing values are handled by configurable encoder strategies, including
-  constant, numeric mean, and categorical most-frequent fills.
-- GeoTIFF I/O is optional and uses `rasterio`.
-- The unsupervised workflow is currently a practical scikit-learn analogue of the
-  original `randomForestSRC(distance = "all")` workflow; exact parity still needs
-  validation against Paper Author data.
+- Missing values are handled by configurable encoder strategies: constant,
+  numeric mean (global per-column), spatially-local `window_mean` (fills
+  from the other valid cells in the same local window, closer to but still
+  coarser than R's `randomForestSRC(na.action="na.impute")`), and
+  categorical most-frequent fills.
+- `SpatialLayer` supports both odd and even `window_size`, matching the real
+  R workflows (which use both, depending on the script).
+- GeoTIFF I/O is optional and uses `rasterio`; `read_raster`/
+  `read_spatial_layer` support `window=`/`bounds=` for cropped reads.

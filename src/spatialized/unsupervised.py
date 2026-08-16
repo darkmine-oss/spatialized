@@ -52,7 +52,25 @@ def synthetic_patterns(
 
 @dataclass
 class UnsupervisedSpatialRandomForest:
-    """Unsupervised SRF approximation using synthetic-pattern discrimination."""
+    """Unsupervised SRF approximation using synthetic-pattern discrimination.
+
+    This mirrors the mechanism `randomForestSRC` documents itself using
+    internally for unsupervised forests: it isn't a simplification invented
+    for this package, it's the same real-vs-synthetic-via-independent-column-
+    permutation technique, made explicit via an sklearn
+    ``RandomForestClassifier``. Validated against a real R distance matrix
+    recovered by re-running the original `SRFGeoTIFF.R` workflow (see
+    `.features/PLAN.md`, "Improve Unsupervised SRF Parity", and
+    `examples/validate_unsupervised_srf_distance.py`): the resulting distance
+    geometry is correlated with R's own `rfsrc(distance="all")` output but
+    only moderately (Pearson r ~= 0.35 on the same real patterns), and
+    PAM(k=4)-equivalent clustering agreement is weak-to-moderate (adjusted
+    Rand index ~= 0.29). Treat this as directionally similar to the R
+    workflow, not numerically interchangeable with it -- the gap is most
+    likely `randomForestSRC`'s internal splitting/distance computation
+    differing from scikit-learn's, not a bug in the permutation mechanism
+    itself, which the validation confirms is structurally sound.
+    """
 
     n_estimators: int = 100
     max_features: str | int | float | None = "sqrt"
@@ -89,6 +107,30 @@ class UnsupervisedSpatialRandomForest:
             prediction_transform=prediction_transform,
             rotations=rotations,
         )
+        return self.fit_prepared(patterns, n_centers=len(center_array), rotations=rotations, centers=center_array)
+
+    def fit_prepared(
+        self,
+        patterns: np.ndarray,
+        *,
+        n_centers: int,
+        rotations: bool = True,
+        centers: np.ndarray | None = None,
+    ) -> "UnsupervisedSpatialRandomForest":
+        """Fit from an already-vectorised pattern matrix.
+
+        Use this to feed in patterns computed elsewhere -- e.g. a pattern
+        matrix recovered from the original R workflow -- without going
+        through raster-based ``prepare_patterns`` extraction. ``patterns``
+        must already include the rotation-augmented rows (center-major: each
+        center's ``rotations`` variants consecutive) if ``rotations=True``,
+        matching what ``prepare_patterns(..., rotations=True)`` produces.
+        """
+
+        patterns = np.asarray(patterns)
+        if centers is None:
+            centers = np.arange(n_centers)
+        center_array = np.asarray(centers)
         synthetic = synthetic_patterns(patterns, random_state=self.random_state)
         encoder_kwargs = {} if self.encoder_kwargs is None else self.encoder_kwargs
         self.feature_encoder_ = PatternEncoder(**encoder_kwargs).fit(

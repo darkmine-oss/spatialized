@@ -1,4 +1,6 @@
+import csv
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -44,8 +46,11 @@ def test_vectorize_layer_flattens_square_window_row_wise():
 
 def test_vectorize_layer_supports_even_window_size():
     # Some of the original R workflows use even-width patterns (e.g. a 10x10
-    # window) with no unique center cell: `radius = window_size // 2` cells
-    # are taken before the target pixel and the rest after it.
+    # window) with no unique center cell. Verified against a real recovered R
+    # pattern (see .features/PLAN.md, "Improve Unsupervised SRF Parity"): for
+    # an even window_size, `(window_size - 1) // 2` cells are taken before
+    # the target pixel and the rest after -- i.e. window_size=4 takes 1 cell
+    # before, the center, and 2 after.
     layer = SpatialLayer("x", np.arange(36).reshape(6, 6), window_size=4)
 
     result = vectorize_layer(layer, [(2, 2)])
@@ -53,7 +58,7 @@ def test_vectorize_layer_supports_even_window_size():
     np.testing.assert_array_equal(
         result,
         np.array(
-            [[0, 1, 2, 3, 6, 7, 8, 9, 12, 13, 14, 15, 18, 19, 20, 21]],
+            [[7, 8, 9, 10, 13, 14, 15, 16, 19, 20, 21, 22, 25, 26, 27, 28]],
             dtype=float,
         ),
     )
@@ -402,3 +407,45 @@ def test_prepare_training_data_validates_target_length():
 
     with pytest.raises(ValueError, match="target length"):
         prepare_training_data([layer], centers=[(1, 1)], target=[])
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_RECOVERED_REALCASE = _REPO_ROOT / "original_source" / "code" / "realCase"
+_RECOVERED_PATTERN_CSV = _RECOVERED_REALCASE / "recovered_from_RData" / "patbase_train_spatial.csv"
+_MYSAM_CSV = _RECOVERED_REALCASE / "mysam.csv"
+_DEM_TIF = _RECOVERED_REALCASE / "dem.tif"
+
+
+@pytest.mark.skipif(
+    not (_RECOVERED_PATTERN_CSV.exists() and _MYSAM_CSV.exists() and _DEM_TIF.exists()),
+    reason="requires original_source/ (gitignored, not distributed) with the recovered R ground truth",
+)
+def test_even_window_matches_recovered_r_pattern_exactly():
+    # Pins the even-window offset convention (see _extract_windows) against
+    # a real pattern recovered by re-running the original R NWMP.R workflow
+    # -- see .features/PLAN.md, "Validate Against Paper/Test Data".
+    import rasterio
+    from rasterio.windows import Window
+
+    with open(_RECOVERED_PATTERN_CSV, newline="") as handle:
+        reader = csv.reader(handle)
+        next(reader)
+        row = next(reader)
+    r_window = np.array([np.nan if value == "NA" else float(value) for value in row[:100]])
+
+    with open(_MYSAM_CSV, newline="") as handle:
+        reader = csv.reader(handle)
+        next(reader)
+        cell_number = int(next(reader)[1])
+
+    ncols = 311
+    row_index, col_index = divmod(cell_number - 1, ncols)
+
+    crop_window = Window(col_off=657, row_off=2692, width=311, height=311)
+    with rasterio.open(_DEM_TIF) as dataset:
+        values = dataset.read(1, window=crop_window, masked=True).astype(float).filled(np.nan)
+
+    layer = SpatialLayer("dem", values, window_size=10)
+    py_window = vectorize_layer(layer, [(row_index, col_index)])[0]
+
+    np.testing.assert_allclose(py_window, r_window, equal_nan=True)

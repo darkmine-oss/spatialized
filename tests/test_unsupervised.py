@@ -47,6 +47,34 @@ def test_unsupervised_spatial_random_forest_builds_center_distance():
     assert np.all((distance >= 0) & (distance <= 1))
 
 
+def test_unsupervised_spatial_random_forest_fit_prepared_matches_fit():
+    # fit_prepared lets already-vectorised patterns (e.g. recovered from the
+    # original R workflow) be fed in directly, bypassing raster extraction.
+    values = np.array(
+        [
+            [0, 0, 9, 9],
+            [0, 0, 9, 9],
+            [1, 1, 8, 8],
+            [1, 1, 8, 8],
+        ],
+        dtype=float,
+    )
+    layer = SpatialLayer("x", values, window_size=1)
+    centers = [(0, 0), (0, 1), (0, 2), (0, 3)]
+
+    from spatialized.patterns import prepare_patterns
+
+    patterns = prepare_patterns([layer], centers, rotations=False)
+
+    model = UnsupervisedSpatialRandomForest(n_estimators=25, random_state=7, n_jobs=1)
+    model.fit_prepared(patterns, n_centers=len(centers), rotations=False)
+
+    distance = model.distance_
+    assert distance.shape == (len(centers), len(centers))
+    np.testing.assert_array_equal(np.diag(distance), np.zeros(len(centers)))
+    np.testing.assert_allclose(distance, distance.T)
+
+
 def test_unsupervised_spatial_random_forest_encodes_categorical_layers():
     layer = SpatialLayer(
         "lithology",
