@@ -205,32 +205,62 @@ Data to gather:
 
 ### Deep Feature Potential-Field Clustering
 
-Status: partially implemented. Lightweight helpers exist for channel
-normalisation, patch extraction, feature-vector reduction, and clustering. The
-pretrained CNN feature extractor is still pending.
-
-Implement the second workflow from the unsupervised potential-field modelling
+Status: implemented end to end and verified working (real `torch`/
+`torchvision` installed and exercised, not just written against). All steps
+from the second workflow in the unsupervised potential-field modelling
 document:
 
-- normalize potential-field rasters into a 3-channel image (implemented)
-- extract sliding image patches (implemented)
-- use a pretrained CNN such as ResNet50 as a feature extractor (pending)
-- reduce CNN features with UMAP/PCA fallback (implemented)
-- concatenate point intensity values (pending helper)
-- cluster with k-means or another clustering method (implemented)
-- map clusters back to raster space (implemented)
+- normalize potential-field rasters into a 3-channel image (`normalize_channels`)
+- extract sliding image patches, **true 16x16 as the docx specifies**
+  (`patch_centers`/`extract_patches` — both now support even patch sizes,
+  not just odd, using the same before/after split convention as the
+  `SpatialLayer` even-window fix above, for consistency across the package)
+- pretrained ResNet50 feature extractor with its final layer removed
+  (`extract_resnet_features`) — a 16x16 input does survive ResNet50's
+  strided conv stack (spatial map collapses to 1x1 by the last stage;
+  adaptive average pooling handles this), matching the docx's own reasoning
+  for choosing 16x16 over 224x224 (avoiding edge/off-center effects in dense
+  sliding-window extraction)
+- reduce CNN features with UMAP, PCA fallback if `umap-learn` isn't
+  installed (`cluster_feature_vectors`)
+- concatenate point intensity values (`point_intensities_at_centers`, wired
+  into `cluster_feature_vectors` via a new `point_intensities` parameter,
+  concatenated *after* dimensionality reduction per the docx's ordering)
+- cluster with k-means (`cluster_feature_vectors`)
+- map clusters back to raster space (`label_grid` on the result)
+
+Verified end to end: 16x16 patches -> ResNet50 (2048-dim) -> UMAP (6-dim) ->
+concatenate 3 raw channel intensities (9-dim) -> k-means(k=8) -> label grid,
+on synthetic data with real `torch`/`torchvision` installed (not mocked).
+8/9 `tests/test_deep_features.py` tests exercise this without skipping when
+torch is present; 2 skip cleanly when it isn't (it's an optional `deep`
+extra, matching the existing package convention).
+
+Not yet done:
+
+- no reference R/docx output exists to numerically validate against (this
+  workflow was only ever described in the docx, not run and saved anywhere
+  in `original_source/`) — unlike the two NWMP cases and the unsupervised
+  SRF distance matrix, there is no ground truth to check pixel-for-pixel or
+  cluster-for-cluster; the docx's own figures are illustrative images only
+- no example script demonstrating this on the real Eastern Yilgarn rasters
+  (`original_source/magmap_v7_2019_*`) — the verification above used
+  synthetic data for speed; a real-raster run would need the same chunked/
+  sliding-window treatment the NWMP full-grid predictions use, since the
+  real rasters are ~11.3M cells
 
 Data to gather:
 
-- RTP, 1VD, and gravity rasters over the same area
-- interpreted geology or structural boundaries for qualitative comparison
-- preferred window sizes and target resolutions
+- RTP, 1VD, and gravity rasters over the same area — have real data now
+  (`original_source/magmap_v7_2019_RTP_clip.tif`,
+  `magmap_v7_2019_1VD_clip.tif`, `residual160km_eastern_yilgarn.tif`)
+- interpreted geology or structural boundaries for qualitative comparison —
+  still missing
 
 Dependency notes:
 
-- add optional `deep` extra only when this workflow is implemented
-- likely dependencies: `torch`/`torchvision` or another CNN backend,
-  `umap-learn`, and possibly image tiling utilities
+- `deep` extra now includes `torch>=2.0` and `torchvision>=0.15` alongside
+  `umap-learn>=0.5` (`pyproject.toml`)
 
 ### Feature Importance and Zone of Influence
 
@@ -247,7 +277,8 @@ Required outputs:
 
 ### Improve Unsupervised SRF Parity
 
-Status: VALIDATED (result: moderate match, not close). The current
+Status: CLOSED (decision: accept as documented limitation, not pursuing
+further). The current
 unsupervised implementation is a scikit-learn analogue of the original
 `randomForestSRC(distance = "all")` workflow. It trains a classifier to
 separate real vectorised spatial patterns from synthetic patterns generated
@@ -279,23 +310,28 @@ internal splitting/distance computation differing from scikit-learn's
 `RandomForestClassifier`, not the synthetic-generation or rotation-collapse
 logic (both confirmed structurally correct against the R script's own code).
 
-Remaining work:
+**R-vs-R noise baseline** (resolves the open question above): re-ran
+`rfsrc(distance="all")` a second time on the exact same `patbase_train.csv`
+patterns, with a fresh independent forest fit (no `set.seed()`, matching the
+original script) — script and outputs at
+`original_source/recovered_from_RData/rerun_srf_distance_r_vs_r.R`,
+`myDist_rerun2.csv`, `pam_k4_clusters_rerun2.csv`. Result: **R vs R itself is
+highly reproducible** (distance Pearson r=0.993, Spearman r=0.991, PAM(k=4)
+adjusted Rand index=0.885) — night and day versus the Python-vs-R numbers
+above. This settles the question: the ~0.35 correlation / ~0.29 ARI gap
+between Python and R is **not run-to-run randomness, it is a real
+algorithmic difference** between `randomForestSRC`'s internal unsupervised
+splitting/distance computation and scikit-learn's `RandomForestClassifier`.
 
-- decide whether a closer `randomForestSRC`-compatible backend is worth
-  building (e.g. reimplementing its specific unsupervised splitting rule)
-  given the ~0.35 correlation ceiling found here, or whether "directionally
-  similar, not numerically interchangeable" is an acceptable, clearly
-  documented approximation for this workflow
-- compare cluster stability across multiple R reruns too (R's own PAM
-  clustering isn't perfectly reproducible either, since `SRFGeoTIFF.R` never
-  calls `set.seed()` — worth knowing how much of the ~0.29 ARI gap is
-  algorithmic versus just run-to-run R noise, by re-running the R recovery
-  script a second time and comparing R-vs-R agreement as a baseline)
-- document where the implementation is exact versus approximate — this
-  section itself is now that documentation for the distance/clustering
-  piece; the pattern-extraction and rotation-augmentation pieces are exact
-  (validated in the same run: `patbase_train.csv`'s shape and window sizes
-  matched the R script's own formulas exactly before this comparison ran)
+**Decision (made after seeing this result): do not pursue a closer
+`randomForestSRC`-compatible backend.** Reimplementing R's actual internal
+unsupervised splitting rule would mean porting `randomForestSRC`'s C-level
+mechanics, a substantial undertaking with no guaranteed payoff. The
+sklearn-based approximation stays as the implementation, clearly documented
+(here, in the `unsupervised.py` docstring, and in the README) as
+"directionally similar, not numerically interchangeable" with R's own
+output. This item is closed; revisit only if a specific downstream use case
+demands tighter numeric parity.
 
 ### Categorical Raster Handling
 
@@ -392,25 +428,45 @@ Examples should use synthetic data until Paper Author test data is available.
 
 ### Agent Skills Workflows
 
-Status: initial `skills/spatialized-workflow/` skill added.
+Status: decomposed into one data-prep skill plus one skill per downstream
+workflow, replacing the earlier single `skills/spatialized-workflow/` skill
+(removed — its content was migrated, not duplicated):
 
-Continue improving the agent `skills/` directory so Codex or other local agents
-can call the different spatialized workflow steps safely and consistently.
+- `skills/spatial-data-prep/` — GeoTIFF loading, `SpatialLayer` construction,
+  odd/even window sizing (with the R-verified even-offset convention),
+  training centers, rotation augmentation, categorical/missing-value
+  handling, feature-layout metadata export. Prerequisite for the rest.
+- `skills/spatial-classify/` — `SpatialRandomForestClassifier`, OOB accuracy,
+  full-grid prediction with entropy, feature importance / zone of influence,
+  CLI `predict-grid`, pointer to the real geology-classification validation.
+- `skills/spatial-regress/` — `SpatialRandomForestRegressor`, OOB R²,
+  `regression_r2_score`/`regression_residuals`, full-grid prediction,
+  feature importance, pointer to the real Cu-regression validation.
+- `skills/spatial-cluster/` — `UnsupervisedSpatialRandomForest`, distance
+  matrix, spectral clustering, silhouette/eigengap diagnostics, MDS,
+  `fit_prepared` for R-validation use cases, and the documented parity
+  limitation stated up front (moderate correlation only, not close — see
+  "Improve Unsupervised SRF Parity" above).
+- `skills/spatial-deep-cluster/` — the ResNet50 deep-feature clustering
+  workflow implemented this session: channel normalisation, even-size patch
+  extraction, `extract_resnet_features`, UMAP reduction,
+  `point_intensities_at_centers` concatenation, k-means, label-grid mapping;
+  notes the `deep` extra requirement and that no R ground truth exists to
+  validate this specific workflow against.
+- `skills/setup/` — unchanged, cross-reference updated to point at the new
+  skill names instead of the removed one.
 
-Skills should cover:
+Remaining work:
 
-- feature layout metadata export
-- GeoTIFF layer inspection
-- vectorised pattern preparation
-- supervised classifier/regressor training
-- full-grid prediction and GeoTIFF writing
-- feature importance and zone-of-influence export
-- categorical raster handling checks
-- unsupervised SRF clustering
-- end-to-end workflow orchestration from source rasters to outputs
-
-Each skill should document required inputs, expected outputs, validation checks,
-and which CLI/API calls it uses.
+- categorical raster handling checks and end-to-end orchestration (source
+  rasters through to final outputs) aren't yet their own skill sections —
+  currently folded into `spatial-data-prep`/`spatial-classify`/
+  `spatial-regress` rather than called out separately; revisit if agents
+  need a single "run the whole pipeline" entry point beyond the individual
+  workflow skills
+- none of the five skills have been exercised end-to-end by an actual agent
+  session yet (only written and cross-checked against real function
+  signatures) — worth a dry run
 
 ### Packaging and CI Polish
 

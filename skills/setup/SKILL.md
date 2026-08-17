@@ -7,7 +7,9 @@ description: Use when setting up or validating the local spatialized development
 
 Use this skill for repository setup, dependency installation, validation, and
 release-readiness checks. Do not use it for ordinary spatialized modelling
-workflow steps; use `spatialized-workflow` for those.
+workflow steps; use `spatial-data-prep` and the relevant workflow skill
+(`spatial-classify`, `spatial-regress`, `spatial-cluster`, or
+`spatial-deep-cluster`) for those.
 
 ## Development Environment
 

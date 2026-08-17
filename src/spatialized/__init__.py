@@ -5,8 +5,10 @@ from .deep_features import (
     DeepFeatureClusteringResult,
     cluster_feature_vectors,
     extract_patches,
+    extract_resnet_features,
     normalize_channels,
     patch_centers,
+    point_intensities_at_centers,
 )
 from .models import (
     PredictionBatch,
@@ -83,6 +85,7 @@ __all__ = [
     "cluster_diagnostics",
     "cluster_feature_vectors",
     "extract_patches",
+    "extract_resnet_features",
     "feature_layout",
     "grid_from_centers",
     "iter_centers",
@@ -90,6 +93,7 @@ __all__ = [
     "normalize_channels",
     "pattern_size_from_edge",
     "patch_centers",
+    "point_intensities_at_centers",
     "prepare_patterns",
     "prepare_training_data",
     "predict_grid",

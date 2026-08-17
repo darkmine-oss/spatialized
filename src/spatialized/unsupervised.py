@@ -65,11 +65,15 @@ class UnsupervisedSpatialRandomForest:
     geometry is correlated with R's own `rfsrc(distance="all")` output but
     only moderately (Pearson r ~= 0.35 on the same real patterns), and
     PAM(k=4)-equivalent clustering agreement is weak-to-moderate (adjusted
-    Rand index ~= 0.29). Treat this as directionally similar to the R
-    workflow, not numerically interchangeable with it -- the gap is most
-    likely `randomForestSRC`'s internal splitting/distance computation
-    differing from scikit-learn's, not a bug in the permutation mechanism
-    itself, which the validation confirms is structurally sound.
+    Rand index ~= 0.29). This is a real algorithmic gap, not measurement
+    noise: R's own run-to-run reproducibility (same patterns, independent
+    `rfsrc` fits) is r ~= 0.99 / ARI ~= 0.885, so the Python-vs-R numbers
+    above reflect scikit-learn's `RandomForestClassifier` genuinely differing
+    from `randomForestSRC`'s internal unsupervised splitting/distance
+    computation, not a bug in the permutation mechanism itself (confirmed
+    structurally sound by this same validation). Decision: this gap is not
+    being closed -- treat this class as directionally similar to the R
+    workflow, not numerically interchangeable with it.
     """
 
     n_estimators: int = 100

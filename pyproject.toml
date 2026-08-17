@@ -48,6 +48,8 @@ full = [
 ]
 deep = [
   "umap-learn>=0.5",
+  "torch>=2.0",
+  "torchvision>=0.15",
 ]
 test = [
   "pytest>=7",

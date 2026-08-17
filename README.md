@@ -143,14 +143,19 @@ saved and re-generated outputs:
   percentage point (77.1% vs 77.8%), and 92% of individual cell predictions
   agree directly between the two implementations.
 
-The unsupervised workflow does **not** yet match this closely.
-`UnsupervisedSpatialRandomForest` uses the same real-vs-synthetic-pattern
-discrimination mechanism `randomForestSRC` documents itself using internally
-in unsupervised mode, but validating it against a real R distance matrix
-(`examples/validate_unsupervised_srf_distance.py`) shows only moderate
-correlation (Pearson r ~= 0.35) and weak-to-moderate cluster agreement
-(adjusted Rand index ~= 0.29) — see `.features/PLAN.md` ("Improve
-Unsupervised SRF Parity") for the full finding and open questions.
+The unsupervised workflow does **not** match this closely, and by design
+isn't going to. `UnsupervisedSpatialRandomForest` uses the same
+real-vs-synthetic-pattern discrimination mechanism `randomForestSRC`
+documents itself using internally in unsupervised mode, but validating it
+against a real R distance matrix (`examples/validate_unsupervised_srf_distance.py`)
+shows only moderate correlation (Pearson r ~= 0.35) and weak-to-moderate
+cluster agreement (adjusted Rand index ~= 0.29). This is confirmed to be a
+real algorithmic gap, not run-to-run noise (R's own reproducibility on the
+same input is r ~= 0.99), and the decision was made not to pursue a closer
+`randomForestSRC`-compatible backend given the effort involved — see
+`.features/PLAN.md` ("Improve Unsupervised SRF Parity") for the full
+finding. Treat this workflow as directionally similar to R, not numerically
+interchangeable with it.
 
 See `.features/PLAN.md` for the current status of every workflow, including
 what's been validated, what's approximated and how, and what's still
